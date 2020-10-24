@@ -15,7 +15,6 @@ const getBtcBalance = async (btcAddress) => {
 
 const retrieveBtc = async (btcAddress) => {
   const res = await axios.post(BTC_RETRIEVE_URL + btcAddress);
-  console.log(res);
   return res.data.success;
 };
 
