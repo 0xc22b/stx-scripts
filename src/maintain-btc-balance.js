@@ -40,7 +40,7 @@ const runLoop = async () => {
   if (btcBalance < BTC_MIN_THRESHOLD) {
     console.log(`The balance is less than the threshold: ${BTC_MIN_THRESHOLD}.`);
     const res = await retrieveBtc(BTC_ADDRESS);
-    console.log(`Retrive new Btc result is ${res}`);
+    console.log(`Retrive new Btc success result is ${res}`);
   } else {
     console.log(`The balance is more than the threshold: ${BTC_MIN_THRESHOLD}.`);
   }

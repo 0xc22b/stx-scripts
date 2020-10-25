@@ -10,6 +10,7 @@
     "axios": "^0.21.0"
   },
   "scripts": {
-    "maintain-btc-balance": "node src/maintain-btc-balance.js"
+    "maintain-btc-balance": "node src/maintain-btc-balance.js",
+    "maintain-btc-balance-nohup": "nohup node src/maintain-btc-balance.js &"
   }
 }
