@@ -7,10 +7,11 @@
   "license": "MIT",
   "private": true,
   "dependencies": {
-    "axios": "^0.21.0"
+    "axios": "^0.21.0",
+    "better-sqlite3": "^7.1.1"
   },
   "scripts": {
     "maintain-btc-balance": "node src/maintain-btc-balance.js",
-    "maintain-btc-balance-nohup": "nohup node src/maintain-btc-balance.js &"
+    "gen-mining-info": "node src/gen-mining-info.js"
   }
 }

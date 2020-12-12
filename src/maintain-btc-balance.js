@@ -5,8 +5,8 @@ const BTC_ADDRESS = 'mtoqRNSz8sXLPz4hdcGGZJbgeReW616wRj';
 const BTC_BALANCE_URL = 'https://stacks-node-api.blockstack.org/extended/v1/faucets/btc/';
 const BTC_RETRIEVE_URL = 'https://stacks-node-api.blockstack.org/extended/v1/faucets/btc?address=';
 
-const BTC_MIN_THRESHOLD = 0.15;
-const MAINTENANCE_INTERVAL = 1 * 60 * 60 * 1000;
+const BTC_MIN_THRESHOLD = 0.2;
+const MAINTENANCE_INTERVAL = 0.5 * 60 * 60 * 1000;
 
 const getBtcBalance = async (btcAddress) => {
   const res = await axios.get(BTC_BALANCE_URL + btcAddress);
