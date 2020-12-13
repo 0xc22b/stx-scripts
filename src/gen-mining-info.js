@@ -1,5 +1,5 @@
 const Database = require('better-sqlite3');
-const { writeJson, writeCsv } = require('./utils');
+const { writeJson, writeText } = require('./utils');
 
 const DPATH = '/tmp/stacks-testnet-f6aa0b178e2ba9d2';
 const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
@@ -253,7 +253,11 @@ const writeCsvMiningInfo = (burnBlocks, blockCommits, leaderKeys) => {
     prevTotalBurn = totalBurn;
   }
 
-  writeCsv('./data/mining-info.csv', rows);
+  const texts = ['block_height,block_burn,burn,won'];
+  for (const row of rows) {
+    texts.push(`${row.blockHeight},${row.blockBurn},${row.burn},${row.won}`);
+  }
+  writeText('./data/mining-info.csv', texts.join('\n'));
   console.log('writeCsv done.');
 };
 

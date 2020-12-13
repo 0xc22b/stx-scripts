@@ -1,3 +1,4 @@
+const fs = require('fs');
 const Database = require('better-sqlite3');
 const { readJson, writeText, mean, linear } = require('./utils');
 
@@ -14,6 +15,8 @@ const sortitionDb = new Database(`${DPATH}/${SORTITION_DB_FNAME}`, {
   readonly: true,
   fileMustExist: true,
 });
+
+const predFile = fs.createWriteStream('./data/block-burn-preds.csv', { flags: 'a' });
 
 const getSnapshots = (anchorBlockHeight, anchorBurnHeaderHash) => {
 
@@ -85,36 +88,76 @@ const getSnapshots = (anchorBlockHeight, anchorBurnHeaderHash) => {
   return burnBlocks.reverse();
 };
 
-const getBlockCommits = (burnHeaderHash) => {
+const getPointedSnapshots = (blockHeights) => {
 
-  const blockCommitsSelect = sortitionDb.prepare('SELECT * FROM block_commits WHERE burn_header_hash = ?');
+  const blocks = {};
 
-  return blockCommitsSelect.all(burnHeaderHash);
+  const snapshotsSelect = sortitionDb.prepare(`SELECT * FROM snapshots WHERE block_height IN (${blockHeights.map(() => '?').join(',')})`);
+  const result = snapshotsSelect.all(blockHeights);
+  for (const row of result) {
+    blocks[row.block_height] = row;
+  }
+
+  return blocks;
 };
 
-const getLeaderKey = (keyBlockPtr, vtxIndex) => {
+const getBlockCommits = (burnHeaderHashes) => {
 
-  const snapshotsSelect = sortitionDb.prepare('SELECT * FROM snapshots WHERE block_height = ?');
-  const sResult = snapshotsSelect.all(keyBlockPtr);
-  if (sResult.length !== 1) {
-    console.log(`Not found in snapshots with block_height: ${keyBlockPtr}`);
-    return null;
+  const blockCommits = {};
+
+  const blockCommitsSelect = sortitionDb.prepare(`SELECT * FROM block_commits WHERE burn_header_hash IN (${burnHeaderHashes.map(() => '?').join(',')})`);
+  const result = blockCommitsSelect.all(burnHeaderHashes);
+  for (const row of result) {
+    if (!blockCommits[row.burn_header_hash]) blockCommits[row.burn_header_hash] = [];
+    blockCommits[row.burn_header_hash].push(row);
   }
 
-  const block = sResult[0];
+  return blockCommits;
+};
 
-  const leaderKeysSelect = sortitionDb.prepare('SELECT * FROM leader_keys WHERE burn_header_hash = ? and vtxindex = ?');
-  const lResult = leaderKeysSelect.all(block.burn_header_hash, vtxIndex);
+const getLeaderKeys = (burnHeaderHashes) => {
 
-  if (lResult.length !== 1) {
-    console.log(`Not found in leader_keys with burn_header_hash: ${block.burn_header_hash} and vtxindex = ${vtxIndex}`);
-    return null;
+  const leaderKeys = {};
+
+  const leaderKeysSelect = sortitionDb.prepare(`SELECT * FROM leader_keys WHERE burn_header_hash IN (${burnHeaderHashes.map(() => '?').join(',')})`);
+  const result = leaderKeysSelect.all(burnHeaderHashes);
+  for (const row of result) {
+    if (!leaderKeys[row.burn_header_hash]) leaderKeys[row.burn_header_hash] = [];
+    leaderKeys[row.burn_header_hash].push(row);
   }
 
-  return lResult[0];
+  return leaderKeys;
+}
+
+const getLeaderKey = (burnBlocks, leaderKeys, blockCommit) => {
+  const keyBlockPtr = blockCommit.key_block_ptr;
+  const vtxIndex = blockCommit.key_vtxindex;
+  const hash = burnBlocks[keyBlockPtr].burn_header_hash;
+  return leaderKeys[hash].find(k => k.vtxindex === vtxIndex);
 };
 
 const getMiners = (burnBlocks, prevTotalBurn) => {
+
+  const blockCommits = getBlockCommits(burnBlocks.map(b => b.burn_header_hash));
+
+  const pointedBlockHeights = [];
+  for (const h in blockCommits) {
+    for (const b of blockCommits[h]) {
+      if (!pointedBlockHeights.includes(b.key_block_ptr)) {
+        pointedBlockHeights.push(b.key_block_ptr);
+      }
+    }
+  }
+  const pointedBurnBlocks = getPointedSnapshots(pointedBlockHeights);
+
+  const pointedBurnHeaderHashes = []
+  for (const h in pointedBurnBlocks) {
+    const b = pointedBurnBlocks[h];
+    if (!pointedBurnHeaderHashes.includes(b.burn_header_hash)) {
+      pointedBurnHeaderHashes.push(b.burn_header_hash);
+    }
+  }
+  const leaderKeys = getLeaderKeys(pointedBurnHeaderHashes);
 
   const miners = {};
 
@@ -123,15 +166,14 @@ const getMiners = (burnBlocks, prevTotalBurn) => {
     const blockBurn = totalBurn - prevTotalBurn;
 
     const burnHeaderHash = block.burn_header_hash;
-    const blockCommits = getBlockCommits(burnHeaderHash);
-    if (blockCommits.length === 0) {
+    if (!blockCommits[burnHeaderHash]) {
       console.log(`Missing block commits with burn_header_hash: ${burnHeaderHash}`)
       continue;
     }
 
-    for (const blockCommit of blockCommits) {
+    for (const blockCommit of blockCommits[burnHeaderHash]) {
 
-      const leaderKey = getLeaderKey(blockCommit.key_block_ptr, blockCommit.key_vtxindex);
+      const leaderKey = getLeaderKey(pointedBurnBlocks, leaderKeys, blockCommit);
       if (!leaderKey) {
         console.log(`Missing leader key with burn_header_hash: ${burnHeaderHash}, blockCommit: ${blockCommit.key_block_ptr} and vtxindex: ${blockCommit.key_vtxindex}`);
         continue;
@@ -204,28 +246,33 @@ const updateInfo = (info) => {
 
 const calBurnFee = (info) => {
 
-  console.log(`In calBurnFee:`);
   const highestBlockHeight = info.blockHeights[info.blockHeights.length - 1];
   const ratio = info.minerNMined / (highestBlockHeight - START_BLOCK_HEIGHT);
-  console.log(`    highestBlockHeight: ${highestBlockHeight}, ratio: ${ratio}`);
 
   let burnFee = DEFAULT_BURN_FEE;
-  //if (ratio >= PARTICIPATION_RATIO) {
+  let predBlockBurn, minerAvgBlockBurn;
+  if (ratio >= PARTICIPATION_RATIO) {
 
-  const blockBurns = info.blockBurns;
+    const blockBurns = info.blockBurns;
 
-  //const predBlockBurn = blockBurns[blockBurns.length - 1];
-  //const predBlockBurn = mean(blockBurns.slice(-2));
-  const predBlockBurn = linear(blockBurns.slice(-2));
+    predBlockBurn = blockBurns[blockBurns.length - 1];
+    //predBlockBurn = mean(blockBurns.slice(-2));
+    //predBlockBurn = linear(blockBurns.slice(-2));
 
-  const minerAvgBlockBurn = info.minerTotalBurn / info.minerNMined;
-  console.log(`    predBlockBurn: ${predBlockBurn}, minerAvgBlockBurn: ${minerAvgBlockBurn}`);
-  if (predBlockBurn < minerAvgBlockBurn) burnFee = 20000;
-  else burnFee = 0;
-  //}
+    minerAvgBlockBurn = info.minerTotalBurn / info.minerNMined;
+    if (predBlockBurn < minerAvgBlockBurn) burnFee = DEFAULT_BURN_FEE;
+    else burnFee = 0;
+  }
 
-  console.log(`    Calculated burn fee: ${burnFee}`);
-  return burnFee;
+  return {
+    highestBlockHeight,
+    minerNMined: info.minerNMined,
+    minerTotalBurn: info.minerTotalBurn,
+    ratio,
+    predBlockBurn,
+    minerAvgBlockBurn,
+    burnFee,
+  };
 }
 
 const runLoop = async () => {
@@ -233,22 +280,15 @@ const runLoop = async () => {
   let info = readJson('./data/mining-info.json');
   updatedInfo = updateInfo(info);
 
-  const burnFee = calBurnFee(updatedInfo);
+  const {
+    highestBlockHeight, minerNMined, minerTotalBurn, ratio, predBlockBurn,
+    minerAvgBlockBurn, burnFee,
+  } = calBurnFee(updatedInfo);
   writeText('./config/burn-fee.txt', burnFee);
 
-  // update mining-info.json
-  /*const anchorBlockHeight = info.blockHeights[info.blockHeights.length - 1];
-  const curBlockHeight = updatedinfo.blockHeights[updatedInfo.blockHeights.length - 1];
-  if ((curBlockHeight - 20) - anchorBlockHeight > 20) {
-    // BUG: Not that block is used to calculate the updates
-    //   If really need to writeJson, need to recalculate to that specific block!
-    writeJson('./data/mining-info.json', updateInfo);
-  }*/
+  predFile.write(`${highestBlockHeight},${minerNMined},${minerTotalBurn},${ratio},${predBlockBurn},${minerAvgBlockBurn},${burnFee}\n`);
 
-  // update mining-info.csv?
-
-
-  //setTimeout(runLoop, CAL_INTERVAL);
+  setTimeout(runLoop, CAL_INTERVAL);
 };
 
 console.log('Start running...');

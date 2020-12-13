@@ -12,23 +12,6 @@ const writeJson = (fpath, data) => {
   fs.writeFileSync(fpath, JSON.stringify(data));
 };
 
-const CSV_HEAD = 'block_height,block_burn,pred_block_burn,burn,won';
-
-const getCsvRow = (obj) => {
-  const predBlockBurn = obj.predBlockBurn || 'N/A';
-  return `${obj.blockHeight},${obj.blockBurn},${predBlockBurn},${obj.burn},${obj.won}`;
-};
-
-const writeCsv = (fpath, rows) => {
-
-  const texts = [CSV_HEAD];
-  for (const row of rows) {
-    texts.push(getCsvRow(row));
-  }
-
-  fs.writeFileSync(fpath, texts.join('\n'));
-};
-
 const mean = (numbers) => {
   let total = 0;
   for (let i = 0; i < numbers.length; i++) {
@@ -101,4 +84,4 @@ const linear = (numbers) => {
   return m * numbers.length + b;
 };
 
-module.exports = { writeText, readJson, writeJson, writeCsv, mean, linear };
+module.exports = { writeText, readJson, writeJson, mean, linear };
