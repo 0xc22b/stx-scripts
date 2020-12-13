@@ -12,6 +12,7 @@
   },
   "scripts": {
     "maintain-btc-balance": "node src/maintain-btc-balance.js",
-    "gen-mining-info": "node src/gen-mining-info.js"
+    "gen-mining-info": "node src/gen-mining-info.js",
+    "cal-burn-fee": "node src/cal-burn-fee.js"
   }
 }

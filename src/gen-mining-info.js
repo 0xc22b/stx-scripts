@@ -3,30 +3,28 @@ const { writeJson, writeCsv } = require('./utils');
 
 const DPATH = '/tmp/stacks-testnet-f6aa0b178e2ba9d2';
 const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
+const START_BLOCK_HEIGHT = 0;
+const END_BLOCK_HEIGHT = 1647;
+const N_INSTANCES = 40;
 
-const ANCHOR_BLOCK_HEIGHT = 0;
 const ROOT_PARENT_BURN_HEADER_HASH = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
 const SORTITION_DB_FNAME = 'burnchain/db/bitcoin/regtest/sortition.db/marf';
-
 const sortitionDb = new Database(`${DPATH}/${SORTITION_DB_FNAME}`, {
   readonly: true,
   fileMustExist: true,
 });
-
-const snapshotsSelect = sortitionDb.prepare('SELECT * FROM snapshots');
-const blockCommitsSelect = sortitionDb.prepare('SELECT * FROM block_commits');
-const leaderKeysSelect = sortitionDb.prepare('SELECT * FROM leader_keys');
 
 const getSnapshots = () => {
 
   const blocks = {};
   const parentKeys = [];
 
+  const snapshotsSelect = sortitionDb.prepare('SELECT * FROM snapshots');
   const result = snapshotsSelect.all();
   for (const row of result) {
 
     // Need to load the whole chain as some leader keys might refer to
-    //if (row.block_height < ANCHOR_BLOCK_HEIGHT) continue;
+    //if (row.block_height < START_BLOCK_HEIGHT) continue;
     if (row.pox_valid === 0) {
       console.log('Found invalid row in snapshots', row.block_height, row.burn_header_hash)
       continue;
@@ -89,6 +87,7 @@ const getBlockCommits = () => {
 
   const blockCommits = {};
 
+  const blockCommitsSelect = sortitionDb.prepare('SELECT * FROM block_commits');
   const result = blockCommitsSelect.all();
   for (const row of result) {
     if (!blockCommits[row.burn_header_hash]) blockCommits[row.burn_header_hash] = [];
@@ -102,6 +101,7 @@ const getLeaderKeys = () => {
 
   const leaderKeys = {};
 
+  const leaderKeysSelect = sortitionDb.prepare('SELECT * FROM leader_keys');
   const result = leaderKeysSelect.all();
   for (const row of result) {
     if (!leaderKeys[row.burn_header_hash]) leaderKeys[row.burn_header_hash] = [];
@@ -118,18 +118,28 @@ const getLeaderKey = (burnBlocks, leaderKeys, blockCommit) => {
   return leaderKeys[hash].find(k => k.vtxindex === vtxIndex);
 };
 
-const getMiners = (burnBlocks, blockCommits, leaderKeys) => {
+const trimBurnBlocks = (burnBlocks) => {
+  let trimmedBurnBlocks = burnBlocks;
+
+  if (START_BLOCK_HEIGHT > 0) {
+    trimmedBurnBlocks = trimmedBurnBlocks.filter(b => b.block_height >= START_BLOCK_HEIGHT);
+  }
+  if (END_BLOCK_HEIGHT > -1) {
+    trimmedBurnBlocks = trimmedBurnBlocks.filter(b => b.block_height <= END_BLOCK_HEIGHT);
+  }
+
+  return trimmedBurnBlocks;
+}
+
+const getMiners = (trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys) => {
 
   const miners = {};
 
-  let prevTotalBurn = 0;
-  let _burnBlocks = burnBlocks;
-  if (ANCHOR_BLOCK_HEIGHT > 0) {
-    prevTotalBurn = parseInt(burnBlocks[ANCHOR_BLOCK_HEIGHT - 1].total_burn);
-    _burnBlocks = burnBlocks.slice(ANCHOR_BLOCK_HEIGHT);
-  }
+  const prevBlockHeight = trimmedBurnBlocks[0].block_height - 1;
+  const prevBlock = burnBlocks.find(b => b.block_height === prevBlockHeight);
+  let prevTotalBurn = prevBlock ? prevBlock.total_burn : 0;
 
-  for (const block of _burnBlocks) {
+  for (const block of trimmedBurnBlocks) {
     const totalBurn = parseInt(block.total_burn);
     const blockBurn = totalBurn - prevTotalBurn;
 
@@ -174,28 +184,44 @@ const getMiners = (burnBlocks, blockCommits, leaderKeys) => {
   return miners;
 }
 
-const writeJsonMiningInfo = (burnBlocks, miners) => {
+const writeJsonMiningInfo = (trimmedBurnBlocks, burnBlocks, miners) => {
 
-  if (!miners[STX_ADDRESS]) return;
+  const blockHeights = [], blockBurns = [], burnHeaderHashes = [];
+  const start = Math.max(trimmedBurnBlocks.length - N_INSTANCES, 0);
 
-  const blockHeights = [], totalBurns = [];
-  for (let i = burnBlocks.length - 1; i >= Math.max(burnBlocks.length - 40, 0); i--) {
-    blockHeights.push(burnBlocks[i].block_height);
-    totalBurns.push(burnBlocks[i].total_burn);
+  const prevBlockHeight = trimmedBurnBlocks[start].block_height - 1;
+  const prevBlock = burnBlocks.find(b => b.block_height === prevBlockHeight);
+  let prevTotalBurn = prevBlock ? prevBlock.total_burn : 0;
+
+  for (let i = start; i < trimmedBurnBlocks.length; i++) {
+    const block = trimmedBurnBlocks[i];
+    const totalBurn = parseInt(block.total_burn);
+    const blockBurn = totalBurn - prevTotalBurn;
+
+    blockHeights.push(block.block_height);
+    blockBurns.push(blockBurn);
+    burnHeaderHashes.push(block.burn_header_hash);
+
+    prevTotalBurn = totalBurn;
   }
+
+  const nMined = miners[STX_ADDRESS] ? miners[STX_ADDRESS].nMined : 0;
+  const totalBurn = miners[STX_ADDRESS] ? miners[STX_ADDRESS].totalBurn : 0;
 
   const data = {
     blockHeights,
-    totalBurns,
-    minerNMined: miners[STX_ADDRESS].nMined,
-    minerTotalBurn: miners[STX_ADDRESS].totalBurn,
+    blockBurns,
+    burnHeaderHashes,
+    cumulativeTotalBurn: prevTotalBurn,
+    minerNMined: nMined,
+    minerTotalBurn: totalBurn,
   };
+
   writeJson('./data/mining-info.json', data);
+  console.log('writeJson done.');
 };
 
-const writeCsvMiningInfo = (burnBlocks, blockCommits, leaderKeys, miners) => {
-
-  if (!miners[STX_ADDRESS]) return;
+const writeCsvMiningInfo = (burnBlocks, blockCommits, leaderKeys) => {
 
   const rows = [];
 
@@ -220,7 +246,7 @@ const writeCsvMiningInfo = (burnBlocks, blockCommits, leaderKeys, miners) => {
 
     rows.push({
       blockHeight: block.block_height,
-      totalBurn: blockBurn,
+      blockBurn: blockBurn,
       burn,
       won,
     });
@@ -228,16 +254,20 @@ const writeCsvMiningInfo = (burnBlocks, blockCommits, leaderKeys, miners) => {
   }
 
   writeCsv('./data/mining-info.csv', rows);
+  console.log('writeCsv done.');
 };
 
 const main = () => {
   const burnBlocks = getSnapshots();
   const blockCommits = getBlockCommits();
   const leaderKeys = getLeaderKeys();
-  const miners = getMiners(burnBlocks, blockCommits, leaderKeys);
 
-  writeJsonMiningInfo(burnBlocks, miners);
-  writeCsvMiningInfo(burnBlocks, blockCommits, leaderKeys, miners);
+  const trimmedBurnBlocks = trimBurnBlocks(burnBlocks);
+
+  const miners = getMiners(trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys);
+
+  writeJsonMiningInfo(trimmedBurnBlocks, burnBlocks, miners);
+  writeCsvMiningInfo(burnBlocks, blockCommits, leaderKeys);
 }
 
 main();
