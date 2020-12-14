@@ -28,12 +28,7 @@ const getSnapshots = (anchorBlockHeight, anchorBurnHeaderHash) => {
   const snapshotsSelect = sortitionDb.prepare('SELECT * FROM snapshots WHERE block_height > ?');
   const result = snapshotsSelect.all(anchorBlockHeight);
   for (const row of result) {
-
-    if (row.pox_valid === 0) {
-      console.log('Found invalid row in snapshots', row.block_height, row.burn_header_hash)
-      continue;
-    }
-
+    if (row.pox_valid === 0) continue;
     blocks[row.burn_header_hash] = row;
     parentKeys.push(row.parent_burn_header_hash);
   }
