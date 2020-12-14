@@ -2,10 +2,10 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 
 const { getAllSnapshots, getBlockCommits, getLeaderKeys } = require('./apis/db');
-const { trimBurnBlocks, getMiners } = require('./utils');
+const { trimBurnBlocks, getPrevTotalBurn, getMiners } = require('./utils');
 const { SORTITION_DB_FNAME, N_INSTANCES } = require('./types/const');
 
-const DPATH = '/tmp/stacks-testnet-f6aa0b178e2ba9d2';
+const DPATH = '/home/wit/stacks-krypton-dir';
 const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
 const START_BLOCK_HEIGHT = 0;
 const END_BLOCK_HEIGHT = -1;
@@ -15,9 +15,7 @@ const writeJsonMiningInfo = (trimmedBurnBlocks, burnBlocks, miners) => {
   const blockHeights = [], blockBurns = [], burnHeaderHashes = [];
   const start = Math.max(trimmedBurnBlocks.length - N_INSTANCES, 0);
 
-  const prevBlockHeight = trimmedBurnBlocks[start].block_height - 1;
-  const prevBlock = burnBlocks.find(b => b.block_height === prevBlockHeight);
-  let prevTotalBurn = prevBlock ? prevBlock.total_burn : 0;
+  let prevTotalBurn = getPrevTotalBurn(trimmedBurnBlocks, burnBlocks, start);
 
   for (let i = start; i < trimmedBurnBlocks.length; i++) {
     const block = trimmedBurnBlocks[i];

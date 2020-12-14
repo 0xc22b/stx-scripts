@@ -18,15 +18,25 @@ const getLeaderKey = (burnBlocks, leaderKeys, blockCommit) => {
   return leaderKeys[hash].find(k => k.vtxindex === vtxIndex);
 };
 
+const getPrevTotalBurn = (trimmedBurnBlocks, burnBlocks, start = 0) => {
+
+  const prevBlockHeight = trimmedBurnBlocks[start].block_height - 1;
+  console.log(`prevBlockHeight: ${prevBlockHeight}`);
+  if (prevBlockHeight === -1) return 0;
+
+  const prevBlock = burnBlocks.find(b => b.block_height === prevBlockHeight);
+  if (!prevBlock) {
+    throw new Error(`Can't find prev block in burnBlocks. Need to have the prev block to know previous total burn!`);
+  }
+
+  return prevBlock.total_burn;
+};
+
 const getMiners = (trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys, prevTotalBurn = null) => {
 
   const miners = {};
 
-  if (!prevTotalBurn) {
-    const prevBlockHeight = trimmedBurnBlocks[0].block_height - 1;
-    const prevBlock = burnBlocks.find(b => b.block_height === prevBlockHeight);
-    prevTotalBurn = prevBlock ? prevBlock.total_burn : 0;
-  }
+  if (!prevTotalBurn) prevTotalBurn = getPrevTotalBurn(trimmedBurnBlocks, burnBlocks);
 
   for (const block of trimmedBurnBlocks) {
     const totalBurn = parseInt(block.total_burn);
@@ -157,4 +167,6 @@ const getDateTime = () => {
   return year + '-' + month + '-' + date + ' ' + hours + ':' + minutes + ':' + seconds;
 };
 
-module.exports = { trimBurnBlocks, getLeaderKey, getMiners, mean, linear, getDateTime };
+module.exports = {
+  trimBurnBlocks, getLeaderKey, getPrevTotalBurn, getMiners, mean, linear, getDateTime,
+};

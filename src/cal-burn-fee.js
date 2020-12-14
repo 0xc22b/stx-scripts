@@ -4,12 +4,12 @@ const Database = require('better-sqlite3');
 const {
   getFollowingSnapshots, getSpecificSnapshots, getBlockCommits, getLeaderKeys,
 } = require('./apis/db');
-const { getMiners, mean, linear, getDateTime } = require('./utils');
+const { getMiners, mean, linear, getDateTime, trimBurnBlocks } = require('./utils');
 const {
   SORTITION_DB_FNAME, N_INSTANCES, DEFAULT_BURN_FEE, PARTICIPATION_RATIO, N_CONFIRMATIONS,
 } = require('./types/const');
 
-const DPATH = '/tmp/stacks-testnet-f6aa0b178e2ba9d2';
+const DPATH = '/home/wit/stacks-krypton-dir';
 const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
 const START_BLOCK_HEIGHT = 0;
 const CAL_INTERVAL = 2 * 60 * 1000;
@@ -46,7 +46,7 @@ const getUpdatedMiners = (sortitionDb, burnBlocks, prevTotalBurn) => {
   );
 };
 
-const updateInfo = (sortitionDb, info, endBlockHeight = null) => {
+const updateInfo = (sortitionDb, info, endBlockHeight = -1) => {
 
   const anchorBlockHeight = info.blockHeights[info.blockHeights.length - 1];
   const anchorBurnHeaderHash = info.burnHeaderHashes[info.burnHeaderHashes.length - 1];
@@ -56,11 +56,13 @@ const updateInfo = (sortitionDb, info, endBlockHeight = null) => {
   );
   if (burnBlocks.length === 0) return info;
 
-  if (endBlockHeight) {
+  // Here is different from gen-mining-info.js and report-mining-info.js.
+  // As in those, the period is used to scope both blocks and miners,
+  //   but in here, the period is used to scope the miners only.
+  // For blocks, start from anchor block to the end or the block at endBlockHeight.
+  if (endBlockHeight > -1) {
     burnBlocks = burnBlocks.filter(b => b.block_height <= endBlockHeight);
   }
-
-  const miners = getUpdatedMiners(sortitionDb, burnBlocks, info.cumulativeTotalBurn);
 
   const blockHeights = [], blockBurns = [], burnHeaderHashes = [];
   let prevTotalBurn = info.cumulativeTotalBurn;
@@ -75,10 +77,23 @@ const updateInfo = (sortitionDb, info, endBlockHeight = null) => {
     prevTotalBurn = totalBurn;
   }
 
-  const nMined = miners[STX_ADDRESS] ? miners[STX_ADDRESS].nMined : 0;
-  const nWon = miners[STX_ADDRESS] ? miners[STX_ADDRESS].nWon : 0;
-  const burn = miners[STX_ADDRESS] ? miners[STX_ADDRESS].burn : 0;
-  const totalBurn = miners[STX_ADDRESS] ? miners[STX_ADDRESS].totalBurn : 0;
+  const trimmedBurnBlocks = trimBurnBlocks(
+    burnBlocks, START_BLOCK_HEIGHT, endBlockHeight
+  );
+
+  let nMined, nWon, burn, totalBurn;
+  if (trimmedBurnBlocks.length === 0) {
+    [nMined, nWon, burn, totalBurn] = [0, 0, 0, 0];
+  } else {
+    const prevBlock = burnBlocks.find(b => b.block_height === START_BLOCK_HEIGHT - 1);
+    const _prevTotalBurn = prevBlock ? prevBlock.total_burn : info.cumulativeTotalBurn;
+    const miners = getUpdatedMiners(sortitionDb, trimmedBurnBlocks, _prevTotalBurn);
+
+    nMined = miners[STX_ADDRESS] ? miners[STX_ADDRESS].nMined : 0;
+    nWon = miners[STX_ADDRESS] ? miners[STX_ADDRESS].nWon : 0;
+    burn = miners[STX_ADDRESS] ? miners[STX_ADDRESS].burn : 0;
+    totalBurn = miners[STX_ADDRESS] ? miners[STX_ADDRESS].totalBurn : 0;
+  }
 
   const mNInstances = -1 * N_INSTANCES;
   return {

@@ -80,7 +80,7 @@ const getFollowingSnapshots = (sortitionDb, anchorBlockHeight, anchorBurnHeaderH
   }
 
   if (!parentKeys.includes(anchorBurnHeaderHash)) {
-    console.log(`No new block descends from our anchor block, just use what we know now.`);
+    console.log('No new block descends from our anchor block, just use what we know now.');
     return [];
   }
 

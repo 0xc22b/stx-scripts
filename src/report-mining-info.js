@@ -2,10 +2,10 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 
 const { getAllSnapshots, getBlockCommits, getLeaderKeys } = require('./apis/db');
-const { trimBurnBlocks, getLeaderKey, getMiners } = require('./utils');
+const { trimBurnBlocks, getLeaderKey, getPrevTotalBurn, getMiners } = require('./utils');
 const { SORTITION_DB_FNAME } = require('./types/const');
 
-const DPATH = '/tmp/stacks-testnet-f6aa0b178e2ba9d2';
+const DPATH = '/home/wit/stacks-krypton-dir';
 const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
 const START_BLOCK_HEIGHT = 0;
 const END_BLOCK_HEIGHT = -1;
@@ -14,9 +14,7 @@ const writeCsvMiningInfo = (trimmedBurnBlocks, burnBlocks, blockCommits, leaderK
 
   const rows = [];
 
-  const prevBlockHeight = trimmedBurnBlocks[0].block_height - 1;
-  const prevBlock = burnBlocks.find(b => b.block_height === prevBlockHeight);
-  let prevTotalBurn = prevBlock ? prevBlock.total_burn : 0;
+  let prevTotalBurn = getPrevTotalBurn(trimmedBurnBlocks, burnBlocks);
 
   let minerNMined = 0, minerNWon = 0, minerBurn = 0, minerTotalBurn = 0;
   for (const block of trimmedBurnBlocks) {
@@ -93,12 +91,12 @@ const main = () => {
     burnBlocks, START_BLOCK_HEIGHT, END_BLOCK_HEIGHT
   );
   if (trimmedBurnBlocks.length === 0) {
-    throw new Error('trimmedBurnBlocks cannot be empty. Need it to find prevTotalBurn');
+    throw new Error('trimmedBurnBlocks cannot be empty. Need it to generate reports');
   }
 
-  const miners = getMiners(trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys);
-
   writeCsvMiningInfo(trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys);
+
+  const miners = getMiners(trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys);
   writeCsvMinerInfo(miners);
 }
 
