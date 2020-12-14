@@ -1,141 +1,26 @@
 const fs = require('fs');
 const Database = require('better-sqlite3');
 
-const { getDateTime, mean, linear } = require('./utils');
+const {
+  getFollowingSnapshots, getSpecificSnapshots, getBlockCommits, getLeaderKeys,
+} = require('./apis/db');
+const { getMiners, mean, linear, getDateTime } = require('./utils');
+const {
+  SORTITION_DB_FNAME, N_INSTANCES, DEFAULT_BURN_FEE, PARTICIPATION_RATIO, N_CONFIRMATIONS,
+} = require('./types/const');
 
 const DPATH = '/tmp/stacks-testnet-f6aa0b178e2ba9d2';
 const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
 const START_BLOCK_HEIGHT = 0;
-const N_INSTANCES = 40;
-const DEFAULT_BURN_FEE = 20000;
-const PARTICIPATION_RATIO = 0.33;
 const CAL_INTERVAL = 2 * 60 * 1000;
-const N_CONFIRMATIONS = 30;
-
-const SORTITION_DB_FNAME = 'burnchain/db/bitcoin/regtest/sortition.db/marf';
-const sortitionDb = new Database(`${DPATH}/${SORTITION_DB_FNAME}`, {
-  readonly: true,
-  fileMustExist: true,
-});
 
 const predFile = fs.createWriteStream('./data/block-burn-preds.csv', { flags: 'a' });
 
-const getSnapshots = (anchorBlockHeight, anchorBurnHeaderHash) => {
+const getUpdatedMiners = (sortitionDb, burnBlocks, prevTotalBurn) => {
 
-  const blocks = {};
-  const parentKeys = [];
-
-  const snapshotsSelect = sortitionDb.prepare('SELECT * FROM snapshots WHERE block_height > ?');
-  const result = snapshotsSelect.all(anchorBlockHeight);
-  for (const row of result) {
-    if (row.pox_valid === 0) continue;
-    blocks[row.burn_header_hash] = row;
-    parentKeys.push(row.parent_burn_header_hash);
-  }
-
-  if (!parentKeys.includes(anchorBurnHeaderHash)) {
-    console.log(`No new block descends from our anchor block, just use what we know now.`);
-    return null;
-  }
-
-  const leafKeys = [];
-  for (const key in blocks) {
-    if (!parentKeys.includes(key)) leafKeys.push(key);
-  }
-
-  const branches = [];
-  for (const leafKey of leafKeys) {
-
-    let currentBlock = blocks[leafKey];
-    let branch = [currentBlock];
-
-    while (true) {
-      const nextBlock = blocks[currentBlock.parent_burn_header_hash];
-      if (!nextBlock) break;
-
-      branch.push(nextBlock);
-      currentBlock = nextBlock;
-    }
-    branches.push(branch);
-  }
-
-  for (const branch of branches) {
-    const h = branch[branch.length - 1].parent_burn_header_hash;
-    if (h !== anchorBurnHeaderHash) {
-      console.log('Found branch with no root with our anchor block', branch);
-    }
-
-    const missingHeights = [];
-    let seq = branch[0].block_height;
-    for (let i = 1; i < branch.length; i++) {
-      if (branch[i].block_height !== seq - 1) missingHeights.push(i);
-      seq -= 1;
-    }
-    if (missingHeights.length > 0) {
-      console.log('Found missing height in branch', missingHeights, branch);
-    }
-  }
-
-  const validBranches = branches.filter(b => b[b.length - 1].parent_burn_header_hash === anchorBurnHeaderHash)
-
-  const branchLengths = validBranches.map(b => b.length);
-  console.log(`There are ${validBranches.length} branches from our anchor block with lengths: ${branchLengths}`);
-
-  const burnBlocks = validBranches.find(b => b.length === Math.max(branchLengths));
-  return burnBlocks.reverse();
-};
-
-const getPointedSnapshots = (blockHeights) => {
-
-  const blocks = {};
-
-  const snapshotsSelect = sortitionDb.prepare(`SELECT * FROM snapshots WHERE block_height IN (${blockHeights.map(() => '?').join(',')})`);
-  const result = snapshotsSelect.all(blockHeights);
-  for (const row of result) {
-    blocks[row.block_height] = row;
-  }
-
-  return blocks;
-};
-
-const getBlockCommits = (burnHeaderHashes) => {
-
-  const blockCommits = {};
-
-  const blockCommitsSelect = sortitionDb.prepare(`SELECT * FROM block_commits WHERE burn_header_hash IN (${burnHeaderHashes.map(() => '?').join(',')})`);
-  const result = blockCommitsSelect.all(burnHeaderHashes);
-  for (const row of result) {
-    if (!blockCommits[row.burn_header_hash]) blockCommits[row.burn_header_hash] = [];
-    blockCommits[row.burn_header_hash].push(row);
-  }
-
-  return blockCommits;
-};
-
-const getLeaderKeys = (burnHeaderHashes) => {
-
-  const leaderKeys = {};
-
-  const leaderKeysSelect = sortitionDb.prepare(`SELECT * FROM leader_keys WHERE burn_header_hash IN (${burnHeaderHashes.map(() => '?').join(',')})`);
-  const result = leaderKeysSelect.all(burnHeaderHashes);
-  for (const row of result) {
-    if (!leaderKeys[row.burn_header_hash]) leaderKeys[row.burn_header_hash] = [];
-    leaderKeys[row.burn_header_hash].push(row);
-  }
-
-  return leaderKeys;
-}
-
-const getLeaderKey = (burnBlocks, leaderKeys, blockCommit) => {
-  const keyBlockPtr = blockCommit.key_block_ptr;
-  const vtxIndex = blockCommit.key_vtxindex;
-  const hash = burnBlocks[keyBlockPtr].burn_header_hash;
-  return leaderKeys[hash].find(k => k.vtxindex === vtxIndex);
-};
-
-const getMiners = (burnBlocks, prevTotalBurn) => {
-
-  const blockCommits = getBlockCommits(burnBlocks.map(b => b.burn_header_hash));
+  const blockCommits = getBlockCommits(
+    sortitionDb, burnBlocks.map(b => b.burn_header_hash)
+  );
 
   const pointedBlockHeights = [];
   for (const h in blockCommits) {
@@ -145,7 +30,7 @@ const getMiners = (burnBlocks, prevTotalBurn) => {
       }
     }
   }
-  const pointedBurnBlocks = getPointedSnapshots(pointedBlockHeights);
+  const pointedBurnBlocks = getSpecificSnapshots(sortitionDb, pointedBlockHeights);
 
   const pointedBurnHeaderHashes = []
   for (const h in pointedBurnBlocks) {
@@ -154,65 +39,28 @@ const getMiners = (burnBlocks, prevTotalBurn) => {
       pointedBurnHeaderHashes.push(b.burn_header_hash);
     }
   }
-  const leaderKeys = getLeaderKeys(pointedBurnHeaderHashes);
+  const leaderKeys = getLeaderKeys(sortitionDb, pointedBurnHeaderHashes);
 
-  const miners = {};
-
-  for (const block of burnBlocks) {
-    const totalBurn = parseInt(block.total_burn);
-    const blockBurn = totalBurn - prevTotalBurn;
-
-    const burnHeaderHash = block.burn_header_hash;
-    if (!blockCommits[burnHeaderHash]) {
-      console.log(`Missing block commits with burn_header_hash: ${burnHeaderHash}`)
-      continue;
-    }
-
-    for (const blockCommit of blockCommits[burnHeaderHash]) {
-
-      const leaderKey = getLeaderKey(pointedBurnBlocks, leaderKeys, blockCommit);
-      if (!leaderKey) {
-        console.log(`Missing leader key with burn_header_hash: ${burnHeaderHash}, blockCommit: ${blockCommit.key_block_ptr} and vtxindex: ${blockCommit.key_vtxindex}`);
-        continue;
-      }
-
-      const leaderKeyAddress = leaderKey.address;
-
-      if (!miners[leaderKeyAddress]) {
-        miners[leaderKeyAddress] = {
-          nMined: 0,
-          nWon: 0,
-          burn: 0, // this miner's btc burn fee
-          totalBurn: 0, // total burn when this miner does mine
-        };
-      }
-
-      const miner = miners[leaderKeyAddress];
-      miner.nMined += 1;
-      if (blockCommit.txid === block.winning_block_txid) miner.nWon += 1;
-      miner.burn += parseInt(blockCommit.burn_fee);
-      miner.totalBurn += blockBurn;
-    }
-
-    prevTotalBurn = totalBurn;
-  }
-
-  return miners;
+  return getMiners(
+    burnBlocks, pointedBurnBlocks, blockCommits, leaderKeys, prevTotalBurn
+  );
 };
 
-const updateInfo = (info, endBlockHeight = null) => {
+const updateInfo = (sortitionDb, info, endBlockHeight = null) => {
 
   const anchorBlockHeight = info.blockHeights[info.blockHeights.length - 1];
   const anchorBurnHeaderHash = info.burnHeaderHashes[info.burnHeaderHashes.length - 1];
 
-  let burnBlocks = getSnapshots(anchorBlockHeight, anchorBurnHeaderHash);
-  if (!burnBlocks) return info;
+  let burnBlocks = getFollowingSnapshots(
+    sortitionDb, anchorBlockHeight, anchorBurnHeaderHash
+  );
+  if (burnBlocks.length === 0) return info;
 
   if (endBlockHeight) {
     burnBlocks = burnBlocks.filter(b => b.block_height <= endBlockHeight);
   }
 
-  const miners = getMiners(burnBlocks, info.cumulativeTotalBurn);
+  const miners = getUpdatedMiners(sortitionDb, burnBlocks, info.cumulativeTotalBurn);
 
   const blockHeights = [], blockBurns = [], burnHeaderHashes = [];
   let prevTotalBurn = info.cumulativeTotalBurn;
@@ -286,7 +134,12 @@ const runLoop = async () => {
   const info = JSON.parse(fs.readFileSync('./data/mining-info.json'));
   const infoBlockHeight = info.blockHeights[info.blockHeights.length - 1];
   console.log(`Read info from the file with highest block height: ${infoBlockHeight}`);
-  const updatedInfo = updateInfo(info);
+
+  const sortitionDb = new Database(`${DPATH}/${SORTITION_DB_FNAME}`, {
+    readonly: true,
+    fileMustExist: true,
+  });
+  const updatedInfo = updateInfo(sortitionDb, info);
   const updatedInfoBlockHeight = updatedInfo.blockHeights[updatedInfo.blockHeights.length - 1];
   console.log(`Update the info with highest block height: ${updatedInfoBlockHeight}`);
 
@@ -302,7 +155,7 @@ const runLoop = async () => {
   console.log('Write updated info');
 
   if (highestBlockHeight - (N_CONFIRMATIONS * 2) > infoBlockHeight) {
-    const data = updateInfo(info, highestBlockHeight - N_CONFIRMATIONS);
+    const data = updateInfo(sortitionDb, info, highestBlockHeight - N_CONFIRMATIONS);
     fs.writeFileSync('./data/mining-info.json', JSON.stringify(data));
     console.log(`Override the info as highestBlockHeight: ${highestBlockHeight} is higher enough than infoBlockHeight: ${infoBlockHeight}`);
   }
