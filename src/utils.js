@@ -1,17 +1,3 @@
-const fs = require('fs');
-
-const writeText = (fpath, data) => {
-  fs.writeFileSync(fpath, data);
-};
-
-const readJson = (fpath) => {
-  return JSON.parse(fs.readFileSync(fpath));
-}
-
-const writeJson = (fpath, data) => {
-  fs.writeFileSync(fpath, JSON.stringify(data));
-};
-
 const mean = (numbers) => {
   let total = 0;
   for (let i = 0; i < numbers.length; i++) {
@@ -84,4 +70,4 @@ const linear = (numbers) => {
   return m * numbers.length + b;
 };
 
-module.exports = { writeText, readJson, writeJson, mean, linear };
+module.exports = { mean, linear };

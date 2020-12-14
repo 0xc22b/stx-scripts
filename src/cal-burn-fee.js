@@ -1,6 +1,6 @@
 const fs = require('fs');
 const Database = require('better-sqlite3');
-const { readJson, writeText, mean, linear } = require('./utils');
+const { mean, linear } = require('./utils');
 
 const DPATH = '/tmp/stacks-testnet-f6aa0b178e2ba9d2';
 const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
@@ -228,6 +228,8 @@ const updateInfo = (info) => {
   }
 
   const nMined = miners[STX_ADDRESS] ? miners[STX_ADDRESS].nMined : 0;
+  const nWon = miners[STX_ADDRESS] ? miners[STX_ADDRESS].nWon : 0;
+  const burn = miners[STX_ADDRESS] ? miners[STX_ADDRESS].burn : 0;
   const totalBurn = miners[STX_ADDRESS] ? miners[STX_ADDRESS].totalBurn : 0;
 
   const mNInstances = -1 * N_INSTANCES;
@@ -237,6 +239,8 @@ const updateInfo = (info) => {
     burnHeaderHashes: [...info.burnHeaderHashes, ...burnHeaderHashes].slice(mNInstances),
     cumulativeTotalBurn: prevTotalBurn,
     minerNMined: info.minerNMined + nMined,
+    minerNWon: info.minerNWon + nWon,
+    minerBurn: info.minerBurn + burn,
     minerTotalBurn: info.minerTotalBurn + totalBurn,
   };
 
@@ -247,7 +251,7 @@ const updateInfo = (info) => {
 const calBurnFee = (info) => {
 
   const highestBlockHeight = info.blockHeights[info.blockHeights.length - 1];
-  const ratio = info.minerNMined / (highestBlockHeight - START_BLOCK_HEIGHT);
+  const ratio = info.minerNMined / (highestBlockHeight - START_BLOCK_HEIGHT + 1);
 
   let burnFee = DEFAULT_BURN_FEE;
   let predBlockBurn, minerAvgBlockBurn;
@@ -259,6 +263,7 @@ const calBurnFee = (info) => {
     //predBlockBurn = mean(blockBurns.slice(-2));
     //predBlockBurn = linear(blockBurns.slice(-2));
 
+    // Assume minerNMined always > 0 as ratio is valid.
     minerAvgBlockBurn = info.minerTotalBurn / info.minerNMined;
     if (predBlockBurn < minerAvgBlockBurn) burnFee = DEFAULT_BURN_FEE;
     else burnFee = 0;
@@ -267,6 +272,8 @@ const calBurnFee = (info) => {
   return {
     highestBlockHeight,
     minerNMined: info.minerNMined,
+    minerNWon: info.minerNWon,
+    minerBurn: info.minerBurn,
     minerTotalBurn: info.minerTotalBurn,
     ratio,
     predBlockBurn,
@@ -277,16 +284,16 @@ const calBurnFee = (info) => {
 
 const runLoop = async () => {
 
-  let info = readJson('./data/mining-info.json');
+  let info = JSON.parse(fs.readFileSync('./data/mining-info.json'));
   updatedInfo = updateInfo(info);
 
   const {
-    highestBlockHeight, minerNMined, minerTotalBurn, ratio, predBlockBurn,
-    minerAvgBlockBurn, burnFee,
+    highestBlockHeight, minerNMined, minerNWon, minerBurn, minerTotalBurn,
+    ratio, predBlockBurn, minerAvgBlockBurn, burnFee,
   } = calBurnFee(updatedInfo);
-  writeText('./config/burn-fee.txt', burnFee);
+  fs.writeFileSync('./config/burn-fee.txt', burnFee);
 
-  predFile.write(`${highestBlockHeight},${minerNMined},${minerTotalBurn},${ratio},${predBlockBurn},${minerAvgBlockBurn},${burnFee}\n`);
+  predFile.write(`${highestBlockHeight},${minerNMined},${minerNWon},${minerBurn},${minerTotalBurn},${ratio},${predBlockBurn},${minerAvgBlockBurn},${burnFee}\n`);
 
   setTimeout(runLoop, CAL_INTERVAL);
 };

@@ -1,10 +1,10 @@
+const fs = require('fs');
 const Database = require('better-sqlite3');
-const { writeJson, writeText } = require('./utils');
 
 const DPATH = '/tmp/stacks-testnet-f6aa0b178e2ba9d2';
 const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
 const START_BLOCK_HEIGHT = 0;
-const END_BLOCK_HEIGHT = 1647;
+const END_BLOCK_HEIGHT = -1;
 const N_INSTANCES = 40;
 
 const ROOT_PARENT_BURN_HEADER_HASH = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff';
@@ -206,6 +206,8 @@ const writeJsonMiningInfo = (trimmedBurnBlocks, burnBlocks, miners) => {
   }
 
   const nMined = miners[STX_ADDRESS] ? miners[STX_ADDRESS].nMined : 0;
+  const nWon = miners[STX_ADDRESS] ? miners[STX_ADDRESS].nWon : 0;
+  const burn = miners[STX_ADDRESS] ? miners[STX_ADDRESS].burn : 0;
   const totalBurn = miners[STX_ADDRESS] ? miners[STX_ADDRESS].totalBurn : 0;
 
   const data = {
@@ -214,50 +216,63 @@ const writeJsonMiningInfo = (trimmedBurnBlocks, burnBlocks, miners) => {
     burnHeaderHashes,
     cumulativeTotalBurn: prevTotalBurn,
     minerNMined: nMined,
+    minerNWon: nWon,
+    minerBurn: burn,
     minerTotalBurn: totalBurn,
   };
 
-  writeJson('./data/mining-info.json', data);
+  fs.writeFileSync('./data/mining-info.json', JSON.stringify(data));
   console.log('writeJson done.');
 };
 
-const writeCsvMiningInfo = (burnBlocks, blockCommits, leaderKeys) => {
+const writeCsvMiningInfo = (trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys) => {
 
   const rows = [];
 
-  let prevTotalBurn = 0;
-  for (const block of burnBlocks) {
+  const prevBlockHeight = trimmedBurnBlocks[0].block_height - 1;
+  const prevBlock = burnBlocks.find(b => b.block_height === prevBlockHeight);
+  let prevTotalBurn = prevBlock ? prevBlock.total_burn : 0;
+
+  let minerNMined = 0, minerNWon = 0, minerBurn = 0, minerTotalBurn = 0;
+  for (const block of trimmedBurnBlocks) {
     const totalBurn = parseInt(block.total_burn);
     const blockBurn = totalBurn - prevTotalBurn;
 
-    let burn = 0, won = 0;
+    let burnFee = 0;
 
     const burnHeaderHash = block.burn_header_hash;
     if (blockCommits[burnHeaderHash]) {
       for (const blockCommit of blockCommits[burnHeaderHash]) {
         const leaderKey = getLeaderKey(burnBlocks, leaderKeys, blockCommit);
         if (leaderKey && leaderKey.address === STX_ADDRESS) {
-          burn = parseInt(blockCommit.burn_fee);
-          if (blockCommit.txid === block.winning_block_txid) won = 1;
+
+          burnFee = parseInt(blockCommit.burn_fee);
+
+          minerNMined += 1;
+          if (blockCommit.txid === block.winning_block_txid) minerNWon += 1;
+          minerBurn += burnFee;
+          minerTotalBurn += blockBurn;
           break;
         }
       }
     }
 
+    const ratio = minerNMined / (block.block_height - START_BLOCK_HEIGHT + 1);
+    const minerAvgBlockBurn = minerNMined > 0 ? minerTotalBurn / minerNMined : undefined;
+
     rows.push({
       blockHeight: block.block_height,
-      blockBurn: blockBurn,
-      burn,
-      won,
+      minerNMined, minerNWon, minerBurn, minerTotalBurn,
+      ratio, minerAvgBlockBurn, burnFee,
     });
     prevTotalBurn = totalBurn;
   }
 
-  const texts = ['block_height,block_burn,burn,won'];
+  const texts = ['block_height,miner_n_mined,miner_n_won,miner_burn,miner_total_burn,ratio,pred_block_burn,miner_avg_block_burn,burn_fee'];
   for (const row of rows) {
-    texts.push(`${row.blockHeight},${row.blockBurn},${row.burn},${row.won}`);
+    texts.push(`${row.blockHeight},${row.minerNMined},${row.minerNWon},${row.minerBurn},${row.minerTotalBurn},${row.ratio},undefined,${row.minerAvgBlockBurn},${row.burnFee}`);
   }
-  writeText('./data/mining-info.csv', texts.join('\n'));
+  fs.writeFileSync('./data/mining-info.csv', texts.join('\n'));
   console.log('writeCsv done.');
 };
 
@@ -271,7 +286,7 @@ const main = () => {
   const miners = getMiners(trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys);
 
   writeJsonMiningInfo(trimmedBurnBlocks, burnBlocks, miners);
-  writeCsvMiningInfo(burnBlocks, blockCommits, leaderKeys);
+  writeCsvMiningInfo(trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys);
 }
 
 main();
