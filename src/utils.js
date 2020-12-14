@@ -1,3 +1,16 @@
+const getDateTime = () => {
+  const dateObj = new Date();
+
+  const date = ('0' + dateObj.getDate()).slice(-2);
+  const month = ('0' + (dateObj.getMonth() + 1)).slice(-2);
+  const year = dateObj.getFullYear();
+  const hours = dateObj.getHours();
+  const minutes = dateObj.getMinutes();
+  const seconds = dateObj.getSeconds();
+
+  return year + '-' + month + '-' + date + ' ' + hours + ':' + minutes + ':' + seconds;
+};
+
 const mean = (numbers) => {
   let total = 0;
   for (let i = 0; i < numbers.length; i++) {
@@ -70,4 +83,4 @@ const linear = (numbers) => {
   return m * numbers.length + b;
 };
 
-module.exports = { mean, linear };
+module.exports = { getDateTime, mean, linear };

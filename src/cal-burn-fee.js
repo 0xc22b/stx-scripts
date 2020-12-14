@@ -1,14 +1,16 @@
 const fs = require('fs');
 const Database = require('better-sqlite3');
-const { mean, linear } = require('./utils');
+
+const { getDateTime, mean, linear } = require('./utils');
 
 const DPATH = '/tmp/stacks-testnet-f6aa0b178e2ba9d2';
 const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
 const START_BLOCK_HEIGHT = 0;
+const N_INSTANCES = 40;
 const DEFAULT_BURN_FEE = 20000;
 const PARTICIPATION_RATIO = 0.33;
 const CAL_INTERVAL = 2 * 60 * 1000;
-const N_INSTANCES = 40;
+const N_CONFIRMATIONS = 30;
 
 const SORTITION_DB_FNAME = 'burnchain/db/bitcoin/regtest/sortition.db/marf';
 const sortitionDb = new Database(`${DPATH}/${SORTITION_DB_FNAME}`, {
@@ -200,17 +202,20 @@ const getMiners = (burnBlocks, prevTotalBurn) => {
     prevTotalBurn = totalBurn;
   }
 
-  console.log(miners);
   return miners;
 };
 
-const updateInfo = (info) => {
+const updateInfo = (info, endBlockHeight = null) => {
 
   const anchorBlockHeight = info.blockHeights[info.blockHeights.length - 1];
   const anchorBurnHeaderHash = info.burnHeaderHashes[info.burnHeaderHashes.length - 1];
 
-  const burnBlocks = getSnapshots(anchorBlockHeight, anchorBurnHeaderHash);
+  let burnBlocks = getSnapshots(anchorBlockHeight, anchorBurnHeaderHash);
   if (!burnBlocks) return info;
+
+  if (endBlockHeight) {
+    burnBlocks = burnBlocks.filter(b => b.block_height <= endBlockHeight);
+  }
 
   const miners = getMiners(burnBlocks, info.cumulativeTotalBurn);
 
@@ -233,7 +238,7 @@ const updateInfo = (info) => {
   const totalBurn = miners[STX_ADDRESS] ? miners[STX_ADDRESS].totalBurn : 0;
 
   const mNInstances = -1 * N_INSTANCES;
-  const updatedInfo = {
+  return {
     blockHeights: [...info.blockHeights, ...blockHeights].slice(mNInstances),
     blockBurns: [...info.blockBurns, ...blockBurns].slice(mNInstances),
     burnHeaderHashes: [...info.burnHeaderHashes, ...burnHeaderHashes].slice(mNInstances),
@@ -243,9 +248,6 @@ const updateInfo = (info) => {
     minerBurn: info.minerBurn + burn,
     minerTotalBurn: info.minerTotalBurn + totalBurn,
   };
-
-  console.log(updatedInfo);
-  return updatedInfo;
 }
 
 const calBurnFee = (info) => {
@@ -271,6 +273,7 @@ const calBurnFee = (info) => {
 
   return {
     highestBlockHeight,
+    blockBurn: info.blockBurns[info.blockBurns.length - 1],
     minerNMined: info.minerNMined,
     minerNWon: info.minerNWon,
     minerBurn: info.minerBurn,
@@ -283,18 +286,33 @@ const calBurnFee = (info) => {
 }
 
 const runLoop = async () => {
+  console.log(`Start a burn fee calculation at ${getDateTime()}`);
 
-  let info = JSON.parse(fs.readFileSync('./data/mining-info.json'));
-  updatedInfo = updateInfo(info);
+  const info = JSON.parse(fs.readFileSync('./data/mining-info.json'));
+  const infoBlockHeight = info.blockHeights[info.blockHeights.length - 1];
+  console.log(`Read info from the file with highest block height: ${infoBlockHeight}`);
+  const updatedInfo = updateInfo(info);
+  const updatedInfoBlockHeight = updatedInfo.blockHeights[updatedInfo.blockHeights.length - 1];
+  console.log(`Update the info with highest block height: ${updatedInfoBlockHeight}`);
 
   const {
-    highestBlockHeight, minerNMined, minerNWon, minerBurn, minerTotalBurn,
+    highestBlockHeight, blockBurn, minerNMined, minerNWon, minerBurn, minerTotalBurn,
     ratio, predBlockBurn, minerAvgBlockBurn, burnFee,
   } = calBurnFee(updatedInfo);
+  console.log(`Calculate burn fee: ${burnFee}`);
   fs.writeFileSync('./config/burn-fee.txt', burnFee);
+  console.log('Write calculated burn fee');
 
-  predFile.write(`${highestBlockHeight},${minerNMined},${minerNWon},${minerBurn},${minerTotalBurn},${ratio},${predBlockBurn},${minerAvgBlockBurn},${burnFee}\n`);
+  predFile.write(`${highestBlockHeight},${blockBurn},${minerNMined},${minerNWon},${minerBurn},${minerTotalBurn},${ratio},${predBlockBurn},${minerAvgBlockBurn},${burnFee}\n`);
+  console.log('Write updated info');
 
+  if (highestBlockHeight - (N_CONFIRMATIONS * 2) > infoBlockHeight) {
+    const data = updateInfo(info, highestBlockHeight - N_CONFIRMATIONS);
+    fs.writeFileSync('./data/mining-info.json', JSON.stringify(data));
+    console.log(`Override the info as highestBlockHeight: ${highestBlockHeight} is higher enough than infoBlockHeight: ${infoBlockHeight}`);
+  }
+
+  console.log(`Finish at ${getDateTime()}`);
   setTimeout(runLoop, CAL_INTERVAL);
 };
 

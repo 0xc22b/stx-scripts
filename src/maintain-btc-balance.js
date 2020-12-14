@@ -1,9 +1,10 @@
 const axios = require('axios').default;
+const { getDateTime } = require('./utils');
 
 const BTC_ADDRESS = 'mtoqRNSz8sXLPz4hdcGGZJbgeReW616wRj';
 
-const BTC_BALANCE_URL = 'https://stacks-node-api.blockstack.org/extended/v1/faucets/btc/';
-const BTC_RETRIEVE_URL = 'https://stacks-node-api.blockstack.org/extended/v1/faucets/btc?address=';
+const BTC_BALANCE_URL = 'https://stacks-node-api.krypton.blockstack.org/extended/v1/faucets/btc/';
+const BTC_RETRIEVE_URL = 'https://stacks-node-api.krypton.blockstack.org/extended/v1/faucets/btc?address=';
 
 const BTC_MIN_THRESHOLD = 0.2;
 const MAINTENANCE_INTERVAL = 0.5 * 60 * 60 * 1000;
@@ -16,19 +17,6 @@ const getBtcBalance = async (btcAddress) => {
 const retrieveBtc = async (btcAddress) => {
   const res = await axios.post(BTC_RETRIEVE_URL + btcAddress);
   return res.data.success;
-};
-
-const getDateTime = () => {
-  const dateObj = new Date();
-
-  const date = ('0' + dateObj.getDate()).slice(-2);
-  const month = ('0' + (dateObj.getMonth() + 1)).slice(-2);
-  const year = dateObj.getFullYear();
-  const hours = dateObj.getHours();
-  const minutes = dateObj.getMinutes();
-  const seconds = dateObj.getSeconds();
-
-  return year + '-' + month + '-' + date + ' ' + hours + ':' + minutes + ':' + seconds;
 };
 
 const runLoop = async () => {

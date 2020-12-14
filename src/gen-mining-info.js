@@ -262,15 +262,15 @@ const writeCsvMiningInfo = (trimmedBurnBlocks, burnBlocks, blockCommits, leaderK
 
     rows.push({
       blockHeight: block.block_height,
-      minerNMined, minerNWon, minerBurn, minerTotalBurn,
+      blockBurn, minerNMined, minerNWon, minerBurn, minerTotalBurn,
       ratio, minerAvgBlockBurn, burnFee,
     });
     prevTotalBurn = totalBurn;
   }
 
-  const texts = ['block_height,miner_n_mined,miner_n_won,miner_burn,miner_total_burn,ratio,pred_block_burn,miner_avg_block_burn,burn_fee'];
+  const texts = ['block_height,block_burn,miner_n_mined,miner_n_won,miner_burn,miner_total_burn,ratio,pred_block_burn,miner_avg_block_burn,burn_fee'];
   for (const row of rows) {
-    texts.push(`${row.blockHeight},${row.minerNMined},${row.minerNWon},${row.minerBurn},${row.minerTotalBurn},${row.ratio},undefined,${row.minerAvgBlockBurn},${row.burnFee}`);
+    texts.push(`${row.blockHeight},${row.blockBurn},${row.minerNMined},${row.minerNWon},${row.minerBurn},${row.minerTotalBurn},${row.ratio},undefined,${row.minerAvgBlockBurn},${row.burnFee}`);
   }
   fs.writeFileSync('./data/mining-info.csv', texts.join('\n'));
   console.log('writeCsv done.');
