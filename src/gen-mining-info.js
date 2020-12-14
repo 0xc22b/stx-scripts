@@ -282,6 +282,9 @@ const main = () => {
   const leaderKeys = getLeaderKeys();
 
   const trimmedBurnBlocks = trimBurnBlocks(burnBlocks);
+  if (trimmedBurnBlocks.length === 0) {
+    throw new Error('trimmedBurnBlocks cannot be empty. Need it to find prevTotalBurn');
+  }
 
   const miners = getMiners(trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys);
 
