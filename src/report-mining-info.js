@@ -5,7 +5,7 @@ const { getAllSnapshots, getBlockCommits, getLeaderKeys } = require('./apis/db')
 const { trimBurnBlocks, getLeaderKey, getPrevTotalBurn, getMiners } = require('./utils');
 const { SORTITION_DB_FNAME } = require('./types/const');
 
-const DPATH = '/home/wit/stacks-krypton-dir';
+const DPATH = process.argv[2];
 const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
 const START_BLOCK_HEIGHT = 4543;
 const END_BLOCK_HEIGHT = -1;

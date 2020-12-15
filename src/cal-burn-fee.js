@@ -9,7 +9,7 @@ const {
   SORTITION_DB_FNAME, N_INSTANCES, DEFAULT_BURN_FEE, PARTICIPATION_RATIO, N_CONFIRMATIONS,
 } = require('./types/const');
 
-const DPATH = '/home/wit/stacks-krypton-dir';
+const DPATH = process.argv[2];
 const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
 const START_BLOCK_HEIGHT = 4543;
 const CAL_INTERVAL = 2 * 60 * 1000;
