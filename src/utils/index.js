@@ -21,7 +21,6 @@ const getLeaderKey = (burnBlocks, leaderKeys, blockCommit) => {
 const getPrevTotalBurn = (trimmedBurnBlocks, burnBlocks, start = 0) => {
 
   const prevBlockHeight = trimmedBurnBlocks[start].block_height - 1;
-  console.log(`prevBlockHeight: ${prevBlockHeight}`);
   if (prevBlockHeight === -1) return 0;
 
   const prevBlock = burnBlocks.find(b => b.block_height === prevBlockHeight);
