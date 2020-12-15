@@ -7,7 +7,7 @@ const { SORTITION_DB_FNAME } = require('./types/const');
 
 const DPATH = '/home/wit/stacks-krypton-dir';
 const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
-const START_BLOCK_HEIGHT = 0;
+const START_BLOCK_HEIGHT = 4543;
 const END_BLOCK_HEIGHT = -1;
 
 const writeCsvMiningInfo = (trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys) => {
