@@ -22,15 +22,19 @@ const retrieveBtc = async (btcAddress) => {
 const runLoop = async () => {
   console.log(`Do the maintenance at ${getDateTime()}.`);
 
-  const btcBalance = await getBtcBalance(BTC_ADDRESS);
-  console.log(`Btc balance is ${btcBalance}.`);
+  try {
+    const btcBalance = await getBtcBalance(BTC_ADDRESS);
+    console.log(`Btc balance is ${btcBalance}.`);
 
-  if (btcBalance < BTC_MIN_THRESHOLD) {
-    console.log(`The balance is less than the threshold: ${BTC_MIN_THRESHOLD}.`);
-    const res = await retrieveBtc(BTC_ADDRESS);
-    console.log(`Retrive new Btc success result is ${res}`);
-  } else {
-    console.log(`The balance is more than the threshold: ${BTC_MIN_THRESHOLD}.`);
+    if (btcBalance < BTC_MIN_THRESHOLD) {
+      console.log(`The balance is less than the threshold: ${BTC_MIN_THRESHOLD}.`);
+      const res = await retrieveBtc(BTC_ADDRESS);
+      console.log(`Retrive new Btc success result is ${res}`);
+    } else {
+      console.log(`The balance is more than the threshold: ${BTC_MIN_THRESHOLD}.`);
+    }
+  } catch (error) {
+    console.log(`Cannot connect to stacks api with error: ${error}`);
   }
 
   console.log(`Wait for ${MAINTENANCE_INTERVAL / 1000 / 60} mins for the next maintenance.`);
