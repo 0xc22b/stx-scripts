@@ -7,8 +7,8 @@ const { SORTITION_DB_FNAME, N_INSTANCES } = require('./types/const');
 
 const DPATH = process.argv[2];
 const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
-const START_BLOCK_HEIGHT = 4543 - 70;
-const END_BLOCK_HEIGHT = 4543 - 30;
+const START_BLOCK_HEIGHT = 0;
+const END_BLOCK_HEIGHT = -1;
 
 const writeJsonMiningInfo = (trimmedBurnBlocks, burnBlocks, miners) => {
 

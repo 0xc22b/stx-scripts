@@ -11,7 +11,7 @@ const {
 
 const DPATH = process.argv[2];
 const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
-const START_BLOCK_HEIGHT = 4543;
+const START_BLOCK_HEIGHT = 0;
 const CAL_INTERVAL = 2 * 60 * 1000;
 
 const predFile = fs.createWriteStream('./data/block-burn-preds.csv', { flags: 'a' });
@@ -111,7 +111,8 @@ const updateInfo = (sortitionDb, info, endBlockHeight = -1) => {
 const calBurnFee = (info) => {
 
   const highestBlockHeight = info.blockHeights[info.blockHeights.length - 1];
-  const ratio = info.minerNMined / (highestBlockHeight - START_BLOCK_HEIGHT + 1);
+  const nBlocks = highestBlockHeight - START_BLOCK_HEIGHT + 1;
+  const ratio = info.minerNMined / nBlocks;
 
   let burnFee = DEFAULT_BURN_FEE;
   let predBlockBurn, minerAvgBlockBurn;
@@ -125,8 +126,17 @@ const calBurnFee = (info) => {
 
     // Assume minerNMined always > 0 as ratio is valid.
     minerAvgBlockBurn = info.minerTotalBurn / info.minerNMined;
-    if (predBlockBurn < minerAvgBlockBurn) burnFee = DEFAULT_BURN_FEE;
-    else burnFee = 0;
+
+    if (info.minerNMined > PARTICIPATION_RATIO * nBlocks + 30) {
+      if (predBlockBurn < minerAvgBlockBurn * 0.7) burnFee = DEFAULT_BURN_FEE;
+      else burnFee = 0;
+    } else if (info.minerNMined > PARTICIPATION_RATIO * nBlocks + 15) {
+      if (predBlockBurn < minerAvgBlockBurn * 0.85) burnFee = DEFAULT_BURN_FEE;
+      else burnFee = 0;
+    } else {
+      if (predBlockBurn < minerAvgBlockBurn) burnFee = DEFAULT_BURN_FEE;
+      else burnFee = 0;
+    }
   }
 
   return {
