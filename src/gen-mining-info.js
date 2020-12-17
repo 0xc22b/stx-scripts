@@ -31,8 +31,8 @@ const writeJsonMiningInfo = (trimmedBurnBlocks, burnBlocks, miners) => {
 
   const nMined = miners[STX_ADDRESS] ? miners[STX_ADDRESS].nMined : 0;
   const nWon = miners[STX_ADDRESS] ? miners[STX_ADDRESS].nWon : 0;
-  const burn = miners[STX_ADDRESS] ? miners[STX_ADDRESS].burn : 0;
   const totalBurn = miners[STX_ADDRESS] ? miners[STX_ADDRESS].totalBurn : 0;
+  const burn = miners[STX_ADDRESS] ? miners[STX_ADDRESS].burn : 0;
 
   const data = {
     blockHeights,
@@ -41,8 +41,8 @@ const writeJsonMiningInfo = (trimmedBurnBlocks, burnBlocks, miners) => {
     cumulativeTotalBurn: prevTotalBurn,
     minerNMined: nMined,
     minerNWon: nWon,
-    minerBurn: burn,
     minerTotalBurn: totalBurn,
+    minerBurn: burn,
   };
 
   fs.writeFileSync('./data/mining-info.json', JSON.stringify(data));

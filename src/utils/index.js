@@ -63,16 +63,16 @@ const getMiners = (trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys, prev
         miners[leaderKeyAddress] = {
           nMined: 0,
           nWon: 0,
-          burn: 0, // this miner's btc burn fee
           totalBurn: 0, // total burn when this miner does mine
+          burn: 0, // this miner's btc burn fee
         };
       }
 
       const miner = miners[leaderKeyAddress];
       miner.nMined += 1;
       if (blockCommit.txid === block.winning_block_txid) miner.nWon += 1;
-      miner.burn += parseInt(blockCommit.burn_fee);
       miner.totalBurn += blockBurn;
+      miner.burn += parseInt(blockCommit.burn_fee);
     }
 
     prevTotalBurn = totalBurn;
@@ -166,6 +166,12 @@ const getDateTime = () => {
   return year + '-' + month + '-' + date + ' ' + hours + ':' + minutes + ':' + seconds;
 };
 
+const toFixed = (n, d = 2) => {
+  if (typeof n === 'number' && isFinite(n)) return n.toFixed(d);
+  return n;
+};
+
 module.exports = {
   trimBurnBlocks, getLeaderKey, getPrevTotalBurn, getMiners, mean, linear, getDateTime,
+  toFixed,
 };

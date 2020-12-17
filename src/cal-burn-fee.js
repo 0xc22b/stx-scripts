@@ -4,7 +4,9 @@ const Database = require('better-sqlite3');
 const {
   getFollowingSnapshots, getSpecificSnapshots, getBlockCommits, getLeaderKeys,
 } = require('./apis/db');
-const { getMiners, mean, linear, getDateTime, trimBurnBlocks } = require('./utils');
+const {
+  getMiners, mean, linear, getDateTime, trimBurnBlocks, toFixed,
+} = require('./utils');
 const {
   SORTITION_DB_FNAME, N_INSTANCES, DEFAULT_BURN_FEE, PARTICIPATION_RATIO, N_CONFIRMATIONS,
 } = require('./types/const');
@@ -81,9 +83,9 @@ const updateInfo = (sortitionDb, info, endBlockHeight = -1) => {
     burnBlocks, START_BLOCK_HEIGHT, endBlockHeight
   );
 
-  let nMined, nWon, burn, totalBurn;
+  let nMined, nWon, totalBurn, burn;
   if (trimmedBurnBlocks.length === 0) {
-    [nMined, nWon, burn, totalBurn] = [0, 0, 0, 0];
+    [nMined, nWon, totalBurn, burn] = [0, 0, 0, 0];
   } else {
     const prevBlock = burnBlocks.find(b => b.block_height === START_BLOCK_HEIGHT - 1);
     const _prevTotalBurn = prevBlock ? prevBlock.total_burn : info.cumulativeTotalBurn;
@@ -91,8 +93,8 @@ const updateInfo = (sortitionDb, info, endBlockHeight = -1) => {
 
     nMined = miners[STX_ADDRESS] ? miners[STX_ADDRESS].nMined : 0;
     nWon = miners[STX_ADDRESS] ? miners[STX_ADDRESS].nWon : 0;
-    burn = miners[STX_ADDRESS] ? miners[STX_ADDRESS].burn : 0;
     totalBurn = miners[STX_ADDRESS] ? miners[STX_ADDRESS].totalBurn : 0;
+    burn = miners[STX_ADDRESS] ? miners[STX_ADDRESS].burn : 0;
   }
 
   const mNInstances = -1 * N_INSTANCES;
@@ -103,8 +105,8 @@ const updateInfo = (sortitionDb, info, endBlockHeight = -1) => {
     cumulativeTotalBurn: prevTotalBurn,
     minerNMined: info.minerNMined + nMined,
     minerNWon: info.minerNWon + nWon,
-    minerBurn: info.minerBurn + burn,
     minerTotalBurn: info.minerTotalBurn + totalBurn,
+    minerBurn: info.minerBurn + burn,
   };
 }
 
@@ -144,8 +146,8 @@ const calBurnFee = (info) => {
     blockBurn: info.blockBurns[info.blockBurns.length - 1],
     minerNMined: info.minerNMined,
     minerNWon: info.minerNWon,
-    minerBurn: info.minerBurn,
     minerTotalBurn: info.minerTotalBurn,
+    minerBurn: info.minerBurn,
     ratio,
     predBlockBurn,
     minerAvgBlockBurn,
@@ -169,14 +171,17 @@ const runLoop = async () => {
   console.log(`Update the info with highest block height: ${updatedInfoBlockHeight}`);
 
   const {
-    highestBlockHeight, blockBurn, minerNMined, minerNWon, minerBurn, minerTotalBurn,
+    highestBlockHeight, blockBurn, minerNMined, minerNWon, minerTotalBurn, minerBurn,
     ratio, predBlockBurn, minerAvgBlockBurn, burnFee,
   } = calBurnFee(updatedInfo);
   console.log(`Calculate burn fee: ${burnFee}`);
   fs.writeFileSync('./config/burn-fee.txt', burnFee);
   console.log('Write calculated burn fee');
 
-  predFile.write(`${highestBlockHeight},${blockBurn},${minerNMined},${minerNWon},${minerBurn},${minerTotalBurn},${ratio},${predBlockBurn},${minerAvgBlockBurn},${burnFee}\n`);
+  const pctWon = minerNMined > 0 ? minerNWon / minerNMined : 0;
+  const chanceWon = minerTotalBurn > 0 ? minerBurn / minerTotalBurn : 0;
+
+  predFile.write(`${highestBlockHeight},${blockBurn},${minerNMined},${toFixed(ratio)},${minerNWon},${toFixed(pctWon)},${minerTotalBurn},${minerBurn},${toFixed(chanceWon)},${predBlockBurn},${toFixed(minerAvgBlockBurn)},${burnFee}\n`);
   console.log('Write updated info');
 
   if (highestBlockHeight - (N_CONFIRMATIONS * 2) > infoBlockHeight) {
