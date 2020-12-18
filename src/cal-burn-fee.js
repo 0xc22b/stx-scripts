@@ -178,10 +178,10 @@ const runLoop = async () => {
   fs.writeFileSync('./config/burn-fee.txt', burnFee);
   console.log('Write calculated burn fee');
 
-  const pctWon = minerNMined > 0 ? minerNWon / minerNMined : 0;
-  const chanceWon = minerTotalBurn > 0 ? minerBurn / minerTotalBurn : 0;
+  const pctWon = minerNMined > 0 ? minerNWon / minerNMined * 100 : 0;
+  const chanceWon = minerTotalBurn > 0 ? minerBurn / minerTotalBurn * 100 : 0;
 
-  predFile.write(`${highestBlockHeight},${blockBurn},${minerNMined},${toFixed(ratio)},${minerNWon},${toFixed(pctWon)},${minerTotalBurn},${minerBurn},${toFixed(chanceWon)},${predBlockBurn},${toFixed(minerAvgBlockBurn)},${burnFee}\n`);
+  predFile.write(`${highestBlockHeight},${blockBurn},${minerNMined},${toFixed(ratio)},${minerNWon},${toFixed(pctWon)}%,${minerTotalBurn},${minerBurn},${toFixed(chanceWon)}%,${predBlockBurn},${toFixed(minerAvgBlockBurn)},${burnFee}\n`);
   console.log('Write updated info');
 
   if (highestBlockHeight - (N_CONFIRMATIONS * 2) > infoBlockHeight) {

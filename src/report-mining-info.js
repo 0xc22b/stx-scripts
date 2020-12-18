@@ -56,10 +56,10 @@ const writeCsvMiningInfo = (trimmedBurnBlocks, burnBlocks, blockCommits, leaderK
   const texts = ['block_height,block_burn,miner_n_mined,mined_ratio,miner_n_won,pct_won,miner_total_burn,miner_burn,chance_won,pred_block_burn,miner_avg_block_burn,burn_fee'];
   for (const row of rows) {
 
-    const pctWon = row.minerNMined > 0 ? row.minerNWon / row.minerNMined : 0;
-    const chanceWon = row.minerTotalBurn > 0 ? row.minerBurn / row.minerTotalBurn : 0;
+    const pctWon = row.minerNMined > 0 ? row.minerNWon / row.minerNMined * 100 : 0;
+    const chanceWon = row.minerTotalBurn > 0 ? row.minerBurn / row.minerTotalBurn * 100 : 0;
 
-    texts.push(`${row.blockHeight},${row.blockBurn},${row.minerNMined},${toFixed(row.ratio)},${row.minerNWon},${toFixed(pctWon)},${row.minerTotalBurn},${row.minerBurn},${toFixed(chanceWon)},undefined,${toFixed(row.minerAvgBlockBurn)},${row.burnFee}`);
+    texts.push(`${row.blockHeight},${row.blockBurn},${row.minerNMined},${toFixed(row.ratio)},${row.minerNWon},${toFixed(pctWon)}%,${row.minerTotalBurn},${row.minerBurn},${toFixed(chanceWon)}%,undefined,${toFixed(row.minerAvgBlockBurn)},${row.burnFee}`);
   }
   fs.writeFileSync('./data/mining-info.csv', texts.join('\n'));
   console.log('write mining info done.');
@@ -69,15 +69,18 @@ const writeCsvMinerInfo = (miners) => {
 
   const rows = [];
   for (const k in miners) {
-    const miner = { stxAddress: k, ...miners[k] };
-    miner.eff = miner.nWon / (miner.burn / 100000000);
-    rows.push(miner);
+    rows.push({ stxAddress: k, ...miners[k] });
   }
   rows.sort((a, b) => -1 * (a.eff - b.eff));
 
   const texts = ['stx_address,n_mined,n_won,pct_won,total_burn,burn,chance_won,eff'];
   for (const row of rows) {
-    texts.push(`${row.stxAddress},${row.nMined},${row.nWon},${toFixed(row.nWon / row.nMined)},${row.totalBurn},${row.burn},${toFixed(row.burn / row.totalBurn)},${row.eff}`);
+
+    const pctWon = row.nMined > 0 ? row.nWon / row.nMined * 100 : 0;
+    const chanceWon = row.totalBurn > 0 ? row.burn / row.totalBurn * 100 : 0;
+    const eff = row.burn > 0 ? row.nWon / (row.burn / 100000000) : 0;
+
+    texts.push(`${row.stxAddress},${row.nMined},${row.nWon},${toFixed(pctWon)}%,${row.totalBurn},${row.burn},${toFixed(chanceWon)}%,${toFixed(eff)}`);
   }
   fs.writeFileSync('./data/miner-info.csv', texts.join('\n'));
   console.log('write miner info done.');
