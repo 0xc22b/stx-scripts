@@ -121,23 +121,27 @@ const calBurnFee = (info) => {
   if (ratio >= PARTICIPATION_RATIO) {
 
     const blockBurns = info.blockBurns;
-
-    predBlockBurn = blockBurns[blockBurns.length - 1];
-    //predBlockBurn = mean(blockBurns.slice(-2));
-    //predBlockBurn = linear(blockBurns.slice(-2));
+    const latestBlockBurn = blockBurns[blockBurns.length - 1];
 
     // Assume minerNMined always > 0 as ratio is valid.
     minerAvgBlockBurn = info.minerTotalBurn / info.minerNMined;
 
-    if (info.minerNMined > PARTICIPATION_RATIO * nBlocks + 30) {
-      if (predBlockBurn < minerAvgBlockBurn * 0.7) burnFee = DEFAULT_BURN_FEE;
-      else burnFee = 0;
-    } else if (info.minerNMined > PARTICIPATION_RATIO * nBlocks + 15) {
-      if (predBlockBurn < minerAvgBlockBurn * 0.85) burnFee = DEFAULT_BURN_FEE;
-      else burnFee = 0;
-    } else {
-      if (predBlockBurn < minerAvgBlockBurn) burnFee = DEFAULT_BURN_FEE;
-      else burnFee = 0;
+    if (latestBlockBurn >= minerAvgBlockBurn) burnFee = 0;
+    else {
+      //predBlockBurn = latestBlockBurn;
+      predBlockBurn = mean(blockBurns.slice(-3));
+      //predBlockBurn = linear(blockBurns.slice(-2));
+
+      if (info.minerNMined > PARTICIPATION_RATIO * nBlocks + 30) {
+        if (predBlockBurn < minerAvgBlockBurn * 0.7) burnFee = DEFAULT_BURN_FEE;
+        else burnFee = 0;
+      } else if (info.minerNMined > PARTICIPATION_RATIO * nBlocks + 15) {
+        if (predBlockBurn < minerAvgBlockBurn * 0.85) burnFee = DEFAULT_BURN_FEE;
+        else burnFee = 0;
+      } else {
+        if (predBlockBurn < minerAvgBlockBurn) burnFee = DEFAULT_BURN_FEE;
+        else burnFee = 0;
+      }
     }
   }
 
