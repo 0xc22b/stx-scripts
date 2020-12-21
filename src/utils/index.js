@@ -86,7 +86,7 @@ const mean = (numbers) => {
   for (let i = 0; i < numbers.length; i++) {
     total += numbers[i];
   }
-  return total / number.length;
+  return total / numbers.length;
 };
 
 /**
