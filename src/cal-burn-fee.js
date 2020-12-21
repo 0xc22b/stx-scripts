@@ -13,7 +13,7 @@ const {
 
 const DPATH = process.argv[2];
 const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
-const START_BLOCK_HEIGHT = 0;
+const START_BLOCK_HEIGHT = 983;
 const CAL_INTERVAL = 2 * 60 * 1000;
 
 const predFile = fs.createWriteStream('./data/block-burn-preds.csv', { flags: 'a' });
