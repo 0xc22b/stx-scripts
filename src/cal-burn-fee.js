@@ -185,7 +185,7 @@ const runLoop = async () => {
   const pctWon = minerNMined > 0 ? minerNWon / minerNMined * 100 : 0;
   const chanceWon = minerTotalBurn > 0 ? minerBurn / minerTotalBurn * 100 : 0;
 
-  predFile.write(`${highestBlockHeight},${blockBurn},${minerNMined},${toFixed(ratio)},${minerNWon},${toFixed(pctWon)}%,${minerTotalBurn},${minerBurn},${toFixed(chanceWon)}%,${predBlockBurn},${toFixed(minerAvgBlockBurn)},${burnFee}\n`);
+  predFile.write(`${highestBlockHeight},${blockBurn},${minerNMined},${toFixed(ratio)},${minerNWon},${toFixed(pctWon)}%,${minerTotalBurn},${minerBurn},${toFixed(chanceWon)}%,${toFixed(predBlockBurn)},${toFixed(minerAvgBlockBurn)},${burnFee}\n`);
   console.log('Write updated info');
 
   if (highestBlockHeight - (N_CONFIRMATIONS * 2) > infoBlockHeight) {
