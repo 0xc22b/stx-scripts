@@ -69,18 +69,20 @@ const writeCsvMinerInfo = (miners) => {
 
   const rows = [];
   for (const k in miners) {
-    rows.push({ stxAddress: k, ...miners[k] });
+
+    const miner = miners[k];
+
+    const pctWon = miner.nMined > 0 ? miner.nWon / miner.nMined * 100 : 0;
+    const chanceWon = miner.totalBurn > 0 ? miner.burn / miner.totalBurn * 100 : 0;
+    const eff = miner.burn > 0 ? miner.nWon / (miner.burn / 100000000) : 0;
+
+    rows.push({ stxAddress: k, ...miner, pctWon, chanceWon, eff });
   }
   rows.sort((a, b) => -1 * (a.eff - b.eff));
 
   const texts = ['stx_address,n_mined,n_won,pct_won,total_burn,burn,chance_won,eff'];
   for (const row of rows) {
-
-    const pctWon = row.nMined > 0 ? row.nWon / row.nMined * 100 : 0;
-    const chanceWon = row.totalBurn > 0 ? row.burn / row.totalBurn * 100 : 0;
-    const eff = row.burn > 0 ? row.nWon / (row.burn / 100000000) : 0;
-
-    texts.push(`${row.stxAddress},${row.nMined},${row.nWon},${toFixed(pctWon)}%,${row.totalBurn},${row.burn},${toFixed(chanceWon)}%,${toFixed(eff)}`);
+    texts.push(`${row.stxAddress},${row.nMined},${row.nWon},${toFixed(row.pctWon)}%,${row.totalBurn},${row.burn},${toFixed(row.chanceWon)}%,${toFixed(row.eff)}`);
   }
   fs.writeFileSync('./data/miner-info.csv', texts.join('\n'));
   console.log('write miner info done.');
