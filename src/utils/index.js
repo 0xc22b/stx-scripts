@@ -49,8 +49,8 @@ const getMiners = (trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys, prev
       continue;
     }
 
+    const leaders = {};
     for (const blockCommit of blockCommits[burnHeaderHash]) {
-
       const leaderKey = getLeaderKey(burnBlocks, leaderKeys, blockCommit);
       if (!leaderKey) {
         console.log(`Missing leader key with burn_header_hash: ${burnHeaderHash}, blockCommit: ${blockCommit.key_block_ptr} and vtxindex: ${blockCommit.key_vtxIndex}`);
@@ -58,9 +58,18 @@ const getMiners = (trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys, prev
       }
 
       const leaderKeyAddress = leaderKey.address;
+      if (!leaders[leaderKeyAddress]) {
+        leaders[leaderKeyAddress] = { didWin: false, burn: 0 };
+      }
 
-      if (!miners[leaderKeyAddress]) {
-        miners[leaderKeyAddress] = {
+      const leader = leaders[leaderKeyAddress];
+      leader.didWin = leader.didWin || blockCommit.txid === block.winning_block_txid;
+      leader.burn += parseInt(blockCommit.burn_fee);
+    }
+
+    for (const k in leaders) {
+      if (!miners[k]) {
+        miners[k] = {
           nMined: 0,
           nWon: 0,
           totalBurn: 0, // total burn when this miner does mine
@@ -68,11 +77,12 @@ const getMiners = (trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys, prev
         };
       }
 
-      const miner = miners[leaderKeyAddress];
+      const miner = miners[k];
+      const leader = leaders[k];
       miner.nMined += 1;
-      if (blockCommit.txid === block.winning_block_txid) miner.nWon += 1;
+      if (leader.didWin) miner.nWon += 1;
       miner.totalBurn += blockBurn;
-      miner.burn += parseInt(blockCommit.burn_fee);
+      miner.burn += leader.burn;
     }
 
     prevTotalBurn = totalBurn;

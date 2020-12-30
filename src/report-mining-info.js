@@ -23,27 +23,34 @@ const writeCsvMiningInfo = (trimmedBurnBlocks, burnBlocks, blockCommits, leaderK
     const totalBurn = parseInt(block.total_burn);
     const blockBurn = totalBurn - prevTotalBurn;
 
-    let burnFee = 0;
-
     const burnHeaderHash = block.burn_header_hash;
-    if (blockCommits[burnHeaderHash]) {
-      for (const blockCommit of blockCommits[burnHeaderHash]) {
-        const leaderKey = getLeaderKey(burnBlocks, leaderKeys, blockCommit);
-        if (leaderKey && leaderKey.address === STX_ADDRESS) {
-
-          burnFee = parseInt(blockCommit.burn_fee);
-
-          minerNMined += 1;
-          if (blockCommit.txid === block.winning_block_txid) minerNWon += 1;
-          minerTotalBurn += blockBurn;
-          minerBurn += burnFee;
-          break;
-        }
+    if (!blockCommits[burnHeaderHash]) {
+      if (block.block_height > 303) {
+        console.log(`Missing block commits with burn_header_hash: ${burnHeaderHash}`)
       }
+      continue;
+    }
+
+    let leader = null;
+    for (const blockCommit of blockCommits[burnHeaderHash]) {
+      const leaderKey = getLeaderKey(burnBlocks, leaderKeys, blockCommit);
+      if (leaderKey && leaderKey.address === STX_ADDRESS) {
+        if (!leader) leader = { didWin: false, burn: 0 };
+        leader.didWin = leader.didWin || blockCommit.txid === block.winning_block_txid;
+        leader.burn += parseInt(blockCommit.burn_fee);
+      }
+    }
+
+    if (leader) {
+      minerNMined += 1;
+      if (leader.didWin) minerNWon += 1;
+      minerTotalBurn += blockBurn;
+      minerBurn += leader.burn;
     }
 
     const ratio = minerNMined / (block.block_height - START_BLOCK_HEIGHT + 1);
     const minerAvgBlockBurn = minerNMined > 0 ? minerTotalBurn / minerNMined : undefined;
+    const burnFee = leader ? leader.burn : 0;
 
     rows.push({
       blockHeight: block.block_height,
