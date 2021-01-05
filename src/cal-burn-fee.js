@@ -1,20 +1,24 @@
 const fs = require('fs');
 const Database = require('better-sqlite3');
+const Client = require('bitcoin-core');
 
 const {
   getFollowingSnapshots, getSpecificSnapshots, getBlockCommits, getLeaderKeys,
 } = require('./apis/db');
 const {
-  getMiners, mean, linear, getDateTime, trimBurnBlocks, toFixed,
+  trimBurnBlocks, getLeaders, getMiners, mean, linear, getDateTime, toFixed,
+  lastIndexOfMoreThanZero,
 } = require('./utils');
 const {
-  SORTITION_DB_FNAME, N_INSTANCES, DEFAULT_BURN_FEE, PARTICIPATION_RATIO, N_CONFIRMATIONS,
+  SORTITION_DB_FNAME, N_INSTANCES, N_CONFIRMATIONS,
+  DEFAULT_BURN_FEE, MAX_BURN_FEE, TX_FEE,
 } = require('./types/const');
 
 const DPATH = process.argv[2];
-const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
+const STX_ADDRESS = 'ST29DQWMXH3NV8F9CPB8EKN01V3BKMEP6VG7G80NA';
 const START_BLOCK_HEIGHT = 983;
-const CAL_INTERVAL = 2 * 60 * 1000;
+const AVG_BLOCK_INTERVAL = 7.943; // minutes
+const CAL_INTERVAL = AVG_BLOCK_INTERVAL * 60 * 1000;
 
 const predFile = fs.createWriteStream('./data/block-burn-preds.csv', { flags: 'a' });
 
@@ -66,15 +70,22 @@ const updateInfo = (sortitionDb, info, endBlockHeight = -1) => {
     burnBlocks = burnBlocks.filter(b => b.block_height <= endBlockHeight);
   }
 
-  const blockHeights = [], blockBurns = [], burnHeaderHashes = [];
+  const blockHeights = [], blockBurns = [], burnHeaderHashes = [], burns = [];
   let prevTotalBurn = info.cumulativeTotalBurn;
   for (const block of burnBlocks) {
     const totalBurn = parseInt(block.total_burn);
     const blockBurn = totalBurn - prevTotalBurn;
 
+    let burn = 0;
+    const leaders = getLeaders(
+      burnBlocks, blockCommits, leaderKeys, block.burn_header_hash
+    );
+    if (STX_ADDRESS in leaders) burn = leaders[STX_ADDRESS].burn;
+
     blockHeights.push(block.block_height);
     blockBurns.push(blockBurn);
     burnHeaderHashes.push(block.burn_header_hash);
+    burns.push(burn);
 
     prevTotalBurn = totalBurn;
   }
@@ -102,48 +113,54 @@ const updateInfo = (sortitionDb, info, endBlockHeight = -1) => {
     blockHeights: [...info.blockHeights, ...blockHeights].slice(mNInstances),
     blockBurns: [...info.blockBurns, ...blockBurns].slice(mNInstances),
     burnHeaderHashes: [...info.burnHeaderHashes, ...burnHeaderHashes].slice(mNInstances),
+    burns: [...info.burns, ...burns].slice(mNInstances),
     cumulativeTotalBurn: prevTotalBurn,
     minerNMined: info.minerNMined + nMined,
     minerNWon: info.minerNWon + nWon,
     minerTotalBurn: info.minerTotalBurn + totalBurn,
     minerBurn: info.minerBurn + burn,
   };
-}
+};
 
-const calBurnFee = (info) => {
+const predictBlockBurn = (info) => {
+
+  const { blockBurns } = info;
+  const latestBlockBurn = blockBurns[blockBurns.length - 1]
+
+  if (latestBlockBurn > blockBurns[blockBurns.length - 2]) return latestBlockBurn;
+
+  return mean(blockBurns.slice(-3));
+  //return linear(blockBurns.slice(-2));
+};
+
+const calBurnFee = async (info, btcClient) => {
 
   const highestBlockHeight = info.blockHeights[info.blockHeights.length - 1];
   const nBlocks = highestBlockHeight - START_BLOCK_HEIGHT + 1;
   const ratio = info.minerNMined / nBlocks;
 
+  const remainNBlocks = (1610510400000 - Date.now()) / 1000 / 60 / AVG_BLOCK_INTERVAL;
+  const remainSatoshi = await btcClient.getBalance('*', 0, true) * 100000000;
+
+  const predBlockBurn = predictBlockBurn(info);
+  const minerAvgBlockBurn = info.minerNMined > 0 ? info.minerTotalBurn / info.minerNMined : 0;
+
+  const nLastNoBurn = info.burns.length - lastIndexOfMoreThanZero(info.burns) - 1;
+
   let burnFee = DEFAULT_BURN_FEE;
-  let predBlockBurn, minerAvgBlockBurn;
-  if (ratio >= PARTICIPATION_RATIO) {
+  if (remainNBlocks > 0) burnFee = (remainSatoshi / remainNBlocks) - TX_FEE;
 
-    const blockBurns = info.blockBurns;
-    const latestBlockBurn = blockBurns[blockBurns.length - 1];
-
-    // Assume minerNMined always > 0 as ratio is valid.
-    minerAvgBlockBurn = info.minerTotalBurn / info.minerNMined;
-
-    if (latestBlockBurn >= minerAvgBlockBurn) burnFee = 0;
-    else {
-      //predBlockBurn = latestBlockBurn;
-      predBlockBurn = mean(blockBurns.slice(-3));
-      //predBlockBurn = linear(blockBurns.slice(-2));
-
-      if (info.minerNMined > PARTICIPATION_RATIO * nBlocks + 30) {
-        if (predBlockBurn < minerAvgBlockBurn * 0.7) burnFee = DEFAULT_BURN_FEE;
-        else burnFee = 0;
-      } else if (info.minerNMined > PARTICIPATION_RATIO * nBlocks + 15) {
-        if (predBlockBurn < minerAvgBlockBurn * 0.85) burnFee = DEFAULT_BURN_FEE;
-        else burnFee = 0;
-      } else {
-        if (predBlockBurn < minerAvgBlockBurn) burnFee = DEFAULT_BURN_FEE;
-        else burnFee = 0;
-      }
+  if (nLastNoBurn < Math.floor(60 / AVG_BLOCK_INTERVAL)) {
+    if (remainNBlocks > 900) {
+      if (predBlockBurn >= minerAvgBlockBurn * 0.8) burnFee = 0;
+    } else if (remainNBlocks > 600) {
+      if (predBlockBurn >= minerAvgBlockBurn * 0.9) burnFee = 0;
+    } else if (remainNBlocks > 300) {
+      if (predBlockBurn >= minerAvgBlockBurn) burnFee = 0;
     }
   }
+
+  burnFee = Math.min(burnFee, MAX_BURN_FEE);
 
   return {
     highestBlockHeight,
@@ -174,10 +191,14 @@ const runLoop = async () => {
   const updatedInfoBlockHeight = updatedInfo.blockHeights[updatedInfo.blockHeights.length - 1];
   console.log(`Update the info with highest block height: ${updatedInfoBlockHeight}`);
 
+  const btcClient = new Client({
+    port: 18332, username: 'bitcoin-testnet', password: 'bitcoin-testnet',
+  });
+
   const {
     highestBlockHeight, blockBurn, minerNMined, minerNWon, minerTotalBurn, minerBurn,
     ratio, predBlockBurn, minerAvgBlockBurn, burnFee,
-  } = calBurnFee(updatedInfo);
+  } = await calBurnFee(updatedInfo, btcClient);
   console.log(`Calculate burn fee: ${burnFee}`);
   fs.writeFileSync('./config/burn-fee.txt', burnFee);
   console.log('Write calculated burn fee');

@@ -31,6 +31,29 @@ const getPrevTotalBurn = (trimmedBurnBlocks, burnBlocks, start = 0) => {
   return prevBlock.total_burn;
 };
 
+const getLeaders = (burnBlocks, blockCommits, leaderKeys, burnHeaderHash) => {
+
+  const leaders = {};
+  for (const blockCommit of blockCommits[burnHeaderHash]) {
+    const leaderKey = getLeaderKey(burnBlocks, leaderKeys, blockCommit);
+    if (!leaderKey) {
+      console.log(`Missing leader key with burn_header_hash: ${burnHeaderHash}, blockCommit: ${blockCommit.key_block_ptr} and vtxindex: ${blockCommit.key_vtxIndex}`);
+      continue;
+    }
+
+    const leaderKeyAddress = leaderKey.address;
+    if (!leaders[leaderKeyAddress]) {
+      leaders[leaderKeyAddress] = { didWin: false, burn: 0 };
+    }
+
+    const leader = leaders[leaderKeyAddress];
+    leader.didWin = leader.didWin || blockCommit.txid === block.winning_block_txid;
+    leader.burn += parseInt(blockCommit.burn_fee);
+  }
+
+  return leaders;
+};
+
 const getMiners = (trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys, prevTotalBurn = null) => {
 
   const miners = {};
@@ -49,24 +72,7 @@ const getMiners = (trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys, prev
       continue;
     }
 
-    const leaders = {};
-    for (const blockCommit of blockCommits[burnHeaderHash]) {
-      const leaderKey = getLeaderKey(burnBlocks, leaderKeys, blockCommit);
-      if (!leaderKey) {
-        console.log(`Missing leader key with burn_header_hash: ${burnHeaderHash}, blockCommit: ${blockCommit.key_block_ptr} and vtxindex: ${blockCommit.key_vtxIndex}`);
-        continue;
-      }
-
-      const leaderKeyAddress = leaderKey.address;
-      if (!leaders[leaderKeyAddress]) {
-        leaders[leaderKeyAddress] = { didWin: false, burn: 0 };
-      }
-
-      const leader = leaders[leaderKeyAddress];
-      leader.didWin = leader.didWin || blockCommit.txid === block.winning_block_txid;
-      leader.burn += parseInt(blockCommit.burn_fee);
-    }
-
+    const leaders = getLeaders(burnBlocks, blockCommits, leaderKeys, burnHeaderHash);
     for (const k in leaders) {
       if (!miners[k]) {
         miners[k] = {
@@ -181,7 +187,14 @@ const toFixed = (n, d = 2) => {
   return n;
 };
 
+const lastIndexOfMoreThanZero = (arr) => {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (arr[i] > 0) return i;
+  }
+  return -1;
+};
+
 module.exports = {
-  trimBurnBlocks, getLeaderKey, getPrevTotalBurn, getMiners, mean, linear, getDateTime,
-  toFixed,
+  trimBurnBlocks, getLeaderKey, getPrevTotalBurn, getLeaders, getMiners,
+  mean, linear, getDateTime, toFixed, lastIndexOfMoreThanZero,
 };

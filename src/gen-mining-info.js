@@ -2,17 +2,17 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 
 const { getAllSnapshots, getBlockCommits, getLeaderKeys } = require('./apis/db');
-const { trimBurnBlocks, getPrevTotalBurn, getMiners } = require('./utils');
+const { trimBurnBlocks, getPrevTotalBurn, getLeaders, getMiners } = require('./utils');
 const { SORTITION_DB_FNAME, N_INSTANCES } = require('./types/const');
 
 const DPATH = process.argv[2];
-const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
+const STX_ADDRESS = 'ST29DQWMXH3NV8F9CPB8EKN01V3BKMEP6VG7G80NA';
 const START_BLOCK_HEIGHT = 983 - 60;
 const END_BLOCK_HEIGHT = 983 - 30;
 
-const writeJsonMiningInfo = (trimmedBurnBlocks, burnBlocks, miners) => {
+const writeJsonMiningInfo = (trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys, miners) => {
 
-  const blockHeights = [], blockBurns = [], burnHeaderHashes = [];
+  const blockHeights = [], blockBurns = [], burnHeaderHashes = [], burns = [];
   const start = Math.max(trimmedBurnBlocks.length - N_INSTANCES, 0);
 
   let prevTotalBurn = getPrevTotalBurn(trimmedBurnBlocks, burnBlocks, start);
@@ -22,9 +22,16 @@ const writeJsonMiningInfo = (trimmedBurnBlocks, burnBlocks, miners) => {
     const totalBurn = parseInt(block.total_burn);
     const blockBurn = totalBurn - prevTotalBurn;
 
+    let burn = 0;
+    const leaders = getLeaders(
+      burnBlocks, blockCommits, leaderKeys, block.burn_header_hash
+    );
+    if (STX_ADDRESS in leaders) burn = leaders[STX_ADDRESS].burn;
+
     blockHeights.push(block.block_height);
     blockBurns.push(blockBurn);
     burnHeaderHashes.push(block.burn_header_hash);
+    burns.push(burn);
 
     prevTotalBurn = totalBurn;
   }
@@ -38,6 +45,7 @@ const writeJsonMiningInfo = (trimmedBurnBlocks, burnBlocks, miners) => {
     blockHeights,
     blockBurns,
     burnHeaderHashes,
+    burns,
     cumulativeTotalBurn: prevTotalBurn,
     minerNMined: nMined,
     minerNWon: nWon,
@@ -68,7 +76,7 @@ const main = () => {
 
   const miners = getMiners(trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys);
 
-  writeJsonMiningInfo(trimmedBurnBlocks, burnBlocks, miners);
+  writeJsonMiningInfo(trimmedBurnBlocks, burnBlocks, blockCommits, leaderKeys, miners);
 }
 
 main();

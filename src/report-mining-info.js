@@ -3,12 +3,12 @@ const Database = require('better-sqlite3');
 
 const { getAllSnapshots, getBlockCommits, getLeaderKeys } = require('./apis/db');
 const {
-  trimBurnBlocks, getLeaderKey, getPrevTotalBurn, getMiners, toFixed,
+  trimBurnBlocks, getPrevTotalBurn, getLeaders, getMiners, toFixed,
 } = require('./utils');
 const { SORTITION_DB_FNAME } = require('./types/const');
 
 const DPATH = process.argv[2];
-const STX_ADDRESS = 'ST28WNXZJ140J09F6JQY9CFC3XYAN30V9MRAYX9WC';
+const STX_ADDRESS = 'ST29DQWMXH3NV8F9CPB8EKN01V3BKMEP6VG7G80NA';
 const START_BLOCK_HEIGHT = 983;
 const END_BLOCK_HEIGHT = -1;
 
@@ -31,16 +31,8 @@ const writeCsvMiningInfo = (trimmedBurnBlocks, burnBlocks, blockCommits, leaderK
       continue;
     }
 
-    let leader = null;
-    for (const blockCommit of blockCommits[burnHeaderHash]) {
-      const leaderKey = getLeaderKey(burnBlocks, leaderKeys, blockCommit);
-      if (leaderKey && leaderKey.address === STX_ADDRESS) {
-        if (!leader) leader = { didWin: false, burn: 0 };
-        leader.didWin = leader.didWin || blockCommit.txid === block.winning_block_txid;
-        leader.burn += parseInt(blockCommit.burn_fee);
-      }
-    }
-
+    const leaders = getLeaders(burnBlocks, blockCommits, leaderKeys, burnHeaderHash);
+    const leader = STX_ADDRESS in leaders ? leaders[STX_ADDRESS] : null;
     if (leader) {
       minerNMined += 1;
       if (leader.didWin) minerNWon += 1;
