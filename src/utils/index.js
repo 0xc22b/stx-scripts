@@ -105,6 +105,44 @@ const mean = (numbers) => {
   return total / numbers.length;
 };
 
+const median = (numbers) => {
+  if (numbers.length === 0) return 0;
+
+  numbers.sort(function (a, b) {
+    return a - b;
+  });
+
+  var half = Math.floor(numbers.length / 2);
+
+  if (numbers.length % 2)
+    return numbers[half];
+
+  return (numbers[half - 1] + numbers[half]) / 2.0;
+}
+
+const percentiles = (numbers, qs = [0, 0.25, 0.5, 0.75, 1]) => {
+
+  const results = [];
+  if (numbers.length === 0) return results;
+
+  numbers.sort(function (a, b) {
+    return a - b;
+  });
+
+  for (const q of qs) {
+    const pos = (numbers.length - 1) * q;
+    const base = Math.floor(pos);
+    const rest = pos - base;
+    if (numbers[base + 1] !== undefined) {
+      results.push(numbers[base] + rest * (numbers[base + 1] - numbers[base]));
+    } else {
+      results.push(numbers[base]);
+    }
+  }
+
+  return results;
+}
+
 /**
  * https://github.com/simple-statistics/simple-statistics/blob/master/src/linear_regression.js
  * [Simple linear regression](http://en.wikipedia.org/wiki/Simple_linear_regression)
@@ -196,5 +234,5 @@ const lastIndexOfMoreThanZero = (arr) => {
 
 module.exports = {
   trimBurnBlocks, getLeaderKey, getPrevTotalBurn, getLeaders, getMiners,
-  mean, linear, getDateTime, toFixed, lastIndexOfMoreThanZero,
+  mean, median, percentiles, linear, getDateTime, toFixed, lastIndexOfMoreThanZero,
 };
